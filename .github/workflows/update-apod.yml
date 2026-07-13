@@ -1,0 +1,25 @@
+name: Update NASA APOD
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # Runs daily at 6:00 AM UTC
+  workflow_dispatch:       # Also allows manual trigger
+
+jobs:
+  update-apod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch APOD from NASA
+        run: |
+          curl -s "https://api.nasa.gov/planetary/apod?api_key=${{ secrets.NASA_API_KEY }}&thumbs=true" \
+            -o data/apod.json
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add data/apod.json
+          git diff --cached --quiet || git commit -m "Update APOD for $(date +%Y-%m-%d)"
+          git push
