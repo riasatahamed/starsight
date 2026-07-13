@@ -5,11 +5,14 @@ on:
     - cron: '0 6 * * *'   # Runs daily at 6:00 AM UTC
   workflow_dispatch:       # Also allows manual trigger
 
+permissions:
+  contents: write
+  
 jobs:
   update-apod:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Fetch APOD from NASA
         run: |
