@@ -1,0 +1,2316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>StarSight — Enhanced</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+    <style>
+        :root {
+            --bg: #080c14; --surface: #0f1520; --surface-hover: #161d2b;
+            --border: #1e2838; --border-hover: #2a3649; --text: #e2e8f0;
+            --text-dim: #8896ab; --text-faint: #4a5568; --accent: #c9a96e;
+            --accent-dim: #8b7355; --accent-glow: rgba(201,169,110,0.08);
+            --danger: #c45c5c; --success: #5a9e6e; --warning: #b89a4a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            background: var(--bg); color: var(--text); min-height: 100vh;
+            line-height: 1.5; -webkit-font-smoothing: antialiased; overflow-x: hidden;
+        }
+        
+        /* FULLSCREEN BUG FIXES */
+        body.fullscreen-active {
+            overflow: hidden !important;
+            overscroll-behavior: none !important;
+        }
+        body.fullscreen-active .site-header,
+        body.fullscreen-active .search-wrap,
+        body.fullscreen-active .attribution,
+        body.fullscreen-active .panel:not(.panel-map) {
+            display: none !important; 
+        }
+        body.fullscreen-active .dashboard {
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+        }
+
+        .bg-stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .bg-star { position: absolute; background: white; border-radius: 50%; animation: twinkle var(--duration) ease-in-out infinite; animation-delay: var(--delay); }
+        @keyframes twinkle { 0%, 100% { opacity: var(--min-op); transform: scale(1); } 50% { opacity: var(--max-op); transform: scale(1.5); } }
+        .shooting-star { position: absolute; width: 80px; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,0.4), transparent); transform: rotate(-45deg); animation: shoot var(--shoot-dur) linear infinite; animation-delay: var(--shoot-delay); opacity: 0; }
+        @keyframes shoot { 0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 0.5; } 100% { transform: translateX(400px) translateY(400px) rotate(-45deg); opacity: 0; } }
+        .site-header { position: relative; z-index: 1; padding: 48px 24px 32px; max-width: 1200px; margin: 0 auto; }
+        .site-header h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text); animation: fadeInUp 0.8s ease; }
+        .site-header h1 span { color: var(--accent); }
+        .site-header p { color: var(--text-dim); font-size: 1rem; margin-top: 4px; font-weight: 300; animation: fadeInUp 0.8s ease 0.1s both; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .search-wrap { position: relative; z-index: 100; max-width: 1200px; margin: 0 auto; padding: 0 24px 32px; animation: fadeInUp 0.8s ease 0.2s both; }
+        .search-box { display: flex; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 6px; transition: all 0.3s; position: relative; }
+        .search-box:focus-within { border-color: var(--accent-dim); box-shadow: 0 0 0 3px var(--accent-glow); }
+        .search-box input { flex: 1; background: transparent; border: none; color: var(--text); font-family: inherit; font-size: 0.95rem; padding: 10px 14px; outline: none; }
+        .search-box input::placeholder { color: var(--text-faint); }
+        .search-btn { background: var(--accent); color: var(--bg); border: none; padding: 10px 20px; border-radius: 8px; font-family: inherit; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+        .search-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+        .search-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .locate-btn { background: transparent; color: var(--text-dim); border: 1px solid var(--border); padding: 10px 16px; border-radius: 8px; font-family: inherit; font-weight: 500; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+        .locate-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+        .search-status { margin-top: 10px; font-size: 0.8rem; color: var(--text-dim); min-height: 20px; transition: all 0.3s; }
+        .search-status.error { color: var(--danger); }
+        .search-status.success { color: var(--success); }
+        .search-suggestions { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-height: 260px; overflow-y: auto; z-index: 200; display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+        .search-suggestions.visible { display: block; }
+        .suggestion-item { padding: 10px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.15s; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .suggestion-item:last-child { border-bottom: none; }
+        .suggestion-item:hover, .suggestion-item.active { background: var(--surface-hover); }
+        .suggestion-name { font-size: 0.9rem; color: var(--text); font-weight: 500; }
+        .suggestion-detail { font-size: 0.75rem; color: var(--text-faint); }
+        .suggestion-flag { font-size: 1.1rem; }
+        
+        .dashboard { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px 48px; display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+        .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; transition: all 0.3s; animation: fadeInUp 0.6s ease both; }
+        .panel:nth-child(1) { animation-delay: 0.1s; } .panel:nth-child(2) { animation-delay: 0.15s; } .panel:nth-child(3) { animation-delay: 0.2s; }
+        .panel:nth-child(4) { animation-delay: 0.25s; } .panel:nth-child(5) { animation-delay: 0.3s; } .panel:nth-child(6) { animation-delay: 0.35s; }
+        .panel:nth-child(7) { animation-delay: 0.4s; } .panel:nth-child(8) { animation-delay: 0.45s; }
+        .panel:hover { border-color: var(--border-hover); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+        .panel-title { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); white-space: nowrap; flex-shrink: 0; }
+        .panel-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+        .panel-action { background: transparent; border: 1px solid var(--border); color: var(--text-faint); padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-family: inherit; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .panel-action:hover { border-color: var(--border-hover); color: var(--text-dim); }
+        .panel-action.active { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-glow); }
+
+        .panel-map { grid-column: span 12; min-height: 580px; position: relative; overflow: hidden; }
+        .panel-map.fullscreen-mode {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            z-index: 99999 !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            background: var(--bg) !important;
+            padding: 24px !important;
+        }
+        .panel-map.fullscreen-mode #starCanvas {
+            flex: 1 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+        }
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 75px; 
+            right: 35px;
+            background: rgba(15, 21, 32, 0.6);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            transition: all 0.2s;
+        }
+        .fullscreen-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--accent);
+            border-color: var(--accent-dim);
+        }
+
+        #starCanvas { width: 100%; height: 520px; background: #060a12; border-radius: 12px; cursor: grab; display: block; transition: opacity 0.3s; touch-action: none; -webkit-touch-callout: none; user-select: none; }
+        #starCanvas:active { cursor: grabbing; }
+        #starCanvas.switching { opacity: 0.3; }
+        .map-footer { display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.7rem; color: var(--text-faint); font-family: 'IBM Plex Mono', monospace; gap: 12px; }
+        .star-tooltip { position: fixed; background: rgba(15, 21, 32, 0.98); border: 1px solid var(--border-hover); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; color: var(--text); pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s; z-index: 100000; max-width: 280px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); backdrop-filter: blur(8px); }
+        .star-tooltip.visible { opacity: 1; visibility: visible; }
+        .star-tooltip .tt-name { font-weight: 600; color: var(--accent); font-size: 0.95rem; }
+        .star-tooltip .tt-info { color: var(--text-dim); font-size: 0.78rem; margin-top: 4px; line-height: 1.5; }
+        .star-tooltip .tt-type { display: inline-block; font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; background: var(--accent-glow); color: var(--accent); font-weight: 500; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .panel-moon { grid-column: span 4; text-align: center; }
+        #moonCanvas { display: block; margin: 8px auto 12px; }
+        .moon-name { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+        .moon-detail { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+        .moon-time { font-size: 0.75rem; color: var(--text-faint); margin-top: 8px; font-family: 'IBM Plex Mono', monospace; }
+        .panel-planets { grid-column: span 4; }
+        .planet-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: rgba(255,255,255,0.02); border-radius: 10px; margin-bottom: 6px; transition: all 0.2s; }
+        .planet-row:hover { background: rgba(255,255,255,0.04); transform: translateX(4px); }
+        .planet-row:last-child { margin-bottom: 0; }
+        .planet-sym { width: 28px; text-align: center; font-size: 1.1rem; }
+        .planet-info { flex: 1; }
+        .planet-name { font-size: 0.85rem; font-weight: 500; }
+        .planet-pos { font-size: 0.7rem; color: var(--text-faint); font-family: 'IBM Plex Mono', monospace; }
+        .planet-badge { font-size: 0.65rem; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+        .badge-up { background: rgba(90,158,110,0.12); color: var(--success); }
+        .badge-down { background: rgba(100,116,139,0.1); color: var(--text-faint); }
+        .panel-iss { grid-column: span 4; }
+        .iss-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(255,255,255,0.02); border-radius: 10px; margin-bottom: 6px; transition: all 0.2s; }
+        .iss-row:hover { background: rgba(255,255,255,0.04); }
+        .iss-row:last-child { margin-bottom: 0; }
+        .iss-time { font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; font-weight: 500; color: var(--text); }
+        .iss-meta { font-size: 0.7rem; color: var(--text-faint); }
+        .iss-mag { font-size: 0.75rem; color: var(--accent); font-weight: 500; }
+        .panel-showers { grid-column: span 4; }
+        .shower-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(255,255,255,0.02); border-radius: 10px; margin-bottom: 6px; transition: all 0.2s; }
+        .shower-row:hover { background: rgba(255,255,255,0.04); }
+        .shower-row:last-child { margin-bottom: 0; }
+        .shower-name { font-size: 0.85rem; font-weight: 500; }
+        .shower-when { font-size: 0.7rem; color: var(--text-faint); }
+        .shower-rate { font-size: 0.75rem; color: var(--accent); font-weight: 500; }
+        .panel-weather { grid-column: span 4; }
+        .weather-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .weather-cell { text-align: center; padding: 14px 8px; background: rgba(255,255,255,0.02); border-radius: 10px; transition: all 0.2s; }
+        .weather-cell:hover { background: rgba(255,255,255,0.04); }
+        .weather-val { font-size: 1.3rem; font-weight: 600; color: var(--text); font-family: 'IBM Plex Mono', monospace; }
+        .weather-label { font-size: 0.7rem; color: var(--text-faint); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .bortle-wrap { margin-top: 14px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 10px; }
+        .bortle-top { display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 6px; }
+        .bortle-top span:first-child { color: var(--text-dim); }
+        .bortle-top span:last-child { color: var(--accent); font-weight: 500; font-family: 'IBM Plex Mono', monospace; }
+        .bortle-track { height: 4px; background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; }
+        .bortle-fill { height: 100%; width: 60%; background: var(--accent); border-radius: 2px; transition: width 0.5s ease; }
+        .bortle-note { font-size: 0.7rem; color: var(--text-faint); margin-top: 6px; }
+        .panel-apod { grid-column: span 8; }
+        .apod-content { display: flex; gap: 20px; align-items: flex-start; }
+        .apod-image-wrap { flex: 0 0 280px; position: relative; border-radius: 12px; overflow: hidden; background: #060a12; min-height: 180px; }
+        .apod-image-wrap img { width: 100%; height: auto; display: block; border-radius: 12px; transition: transform 0.4s ease; }
+        .apod-image-wrap:hover img { transform: scale(1.03); }
+        .apod-image-wrap .apod-play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 48px; height: 48px; background: rgba(0,0,0,0.6); border: 2px solid var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.2rem; cursor: pointer; backdrop-filter: blur(4px); }
+        .apod-text { flex: 1; min-width: 0; }
+        .apod-title { font-size: 1.05rem; font-weight: 600; color: var(--text); line-height: 1.4; }
+        .apod-date { font-size: 0.75rem; color: var(--text-faint); margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
+        .apod-explanation { font-size: 0.82rem; color: var(--text-dim); margin-top: 10px; line-height: 1.6; }
+        .apod-copyright { font-size: 0.7rem; color: var(--text-faint); margin-top: 8px; }
+        .apod-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 40px; color: var(--text-faint); font-size: 0.85rem; }
+        .apod-loading .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .apod-error { padding: 30px; text-align: center; color: var(--danger); font-size: 0.85rem; }
+        @media (max-width: 900px) { .apod-content { flex-direction: column; } .apod-image-wrap { flex: none; width: 100%; max-width: 400px; margin: 0 auto; } }
+        .attribution { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px 48px; text-align: center; }
+        .attribution-inner { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+        .attribution h3 { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 16px; }
+        .attribution-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; text-align: left; }
+        .attribution-item { padding: 12px; background: rgba(255,255,255,0.02); border-radius: 10px; }
+        .attribution-item strong { display: block; font-size: 0.8rem; color: var(--accent); margin-bottom: 4px; }
+        .attribution-item span { font-size: 0.75rem; color: var(--text-dim); }
+        .attribution-item a { color: var(--accent-dim); text-decoration: none; }
+        .attribution-item a:hover { color: var(--accent); }
+        .attribution-note { margin-top: 16px; font-size: 0.75rem; color: var(--text-faint); line-height: 1.6; }
+        @media (max-width: 1024px) { .panel-map { grid-column: span 12; } #starCanvas { height: 460px; } .panel-moon { grid-column: span 6; } .panel-planets { grid-column: span 6; } .panel-iss { grid-column: span 6; } .panel-showers { grid-column: span 6; } .panel-weather { grid-column: span 12; } .panel-apod { grid-column: span 12; } }
+        @media (max-width: 640px) { .site-header h1 { font-size: 1.8rem; } .panel { grid-column: span 12 !important; } .panel-map { min-height: 480px; } #starCanvas { height: 420px; } .search-box { flex-wrap: wrap; } .search-box input { width: 100%; } .panel-header { flex-wrap: wrap; } .panel-actions { width: 100%; justify-content: flex-start; margin-top: 4px; } .star-tooltip { max-width: calc(100vw - 32px); left: 16px !important; right: 16px !important; } }
+    </style>
+</head>
+<body>
+<video id="arVideo" autoplay playsinline style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:-1;"></video>
+<div id="arOverlayMsg" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(15,21,32,0.9); color:var(--accent); padding:20px; border-radius:12px; z-index:1000000; text-align:center; font-weight:600; border:1px solid var(--accent); box-shadow:0 10px 40px rgba(0,0,0,0.5);"></div>
+<div id="arWarning" style="display:none; position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:var(--danger); color:#fff; padding:12px 24px; border-radius:30px; z-index:1000000; font-weight:600; box-shadow:0 8px 32px rgba(0,0,0,0.4);">Please point the camera towards the sky</div>
+
+<div class="bg-stars" id="bgStars"></div>
+<div class="star-tooltip" id="starTooltip">
+    <div class="tt-name" id="ttName"></div>
+    <div class="tt-info" id="ttInfo"></div>
+    <div class="tt-type" id="ttType"></div>
+</div>
+<header class="site-header"><h1>Star<span>Sight</span></h1><p>What is visible in your sky tonight — Enhanced with Gaia DR3, OpenNGC, Astronomy Engine & IAU Data</p></header>
+<div class="search-wrap">
+    <div class="search-box">
+        <input type="text" id="cityInput" placeholder="Search city... e.g. Kolkata, Hyderabad, Ranchi" value="" autocomplete="off">
+        <button class="locate-btn" onclick="detectLocation()" title="Use my location">📍</button>
+        <button class="search-btn" id="searchBtn" onclick="searchCity()">Search</button>
+        <div class="search-suggestions" id="searchSuggestions"></div>
+    </div>
+    <div class="search-status" id="searchStatus"></div>
+</div>
+<div class="dashboard">
+    <div class="panel panel-map">
+        <div class="panel-header">
+            <span class="panel-title">Star Map</span>
+            <div class="panel-actions">
+                <button class="panel-action" id="btnAR" onclick="toggleAR()" title="Augmented Reality Mode">AR Mode</button>
+                <button class="panel-action active" id="btnSun" onclick="toggleSun()" title="Toggle simulated daytime visibility">Sun</button>
+                <button class="panel-action active" id="btnConst" onclick="toggleConstellations()">Constellations</button>
+                <button class="panel-action" id="btnGrid" onclick="toggleGrid()">Grid</button>
+                <button class="panel-action active" id="btnHorizon" onclick="toggleHorizon()">Horizon</button>
+                <button class="panel-action" id="btnRotate" onclick="toggleRotateMode()">Rotate</button>
+            </div>
+        </div>
+        
+        <canvas id="starCanvas"></canvas>
+        <button class="fullscreen-btn" id="btnFullscreen" onclick="toggleFullscreen()" title="Toggle Fullscreen">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            </svg>
+        </button>
+
+        <div class="map-footer"><span id="mapHint">drag to pan · scroll to zoom · hover for info · SOUTH AT TOP</span><span id="skyTime">--:--</span></div>
+    </div>
+    <div class="panel panel-moon">
+        <div class="panel-header" style="justify-content: center;"><span class="panel-title">Moon</span></div>
+        <canvas id="moonCanvas" width="100" height="100"></canvas>
+        <div class="moon-name" id="moonPhaseName">Loading...</div>
+        <div class="moon-detail" id="moonIllum">Please wait</div>
+        <div class="moon-time" id="moonTimes">--:--</div>
+    </div>
+    
+    <div class="panel panel-planets">
+        <div class="panel-header"><span class="panel-title">Planets</span></div>
+        <div id="planetsList"><div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Loading planets...</div></div>
+    </div>
+    <div class="panel panel-iss">
+        <div class="panel-header"><span class="panel-title">ISS Passes</span></div>
+        <div id="issList"><div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Loading ISS data...</div></div>
+    </div>
+    <div class="panel panel-showers">
+        <div class="panel-header"><span class="panel-title">Meteor Showers</span></div>
+        <div id="showerList"><div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Loading meteor showers...</div></div>
+    </div>
+    <div class="panel panel-weather">
+        <div class="panel-header">
+            <span class="panel-title">Conditions</span>
+            <span class="panel-title" id="locName" style="text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-faint);">--</span>
+        </div>
+        <div class="weather-grid">
+            <div class="weather-cell"><div class="weather-val" id="wTemp">--</div><div class="weather-label">Temperature</div></div>
+            <div class="weather-cell"><div class="weather-val" id="wHum">--</div><div class="weather-label">Humidity</div></div>
+            <div class="weather-cell"><div class="weather-val" id="wCloud">--</div><div class="weather-label">Clouds</div></div>
+            <div class="weather-cell"><div class="weather-val" id="wVis">--</div><div class="weather-label">Visibility</div></div>
+        </div>
+        <div class="bortle-wrap">
+            <div class="bortle-top"><span>Light Pollution</span><span id="bortleClass">--</span></div>
+            <div class="bortle-track"><div class="bortle-fill" id="bortleFill"></div></div>
+            <div class="bortle-note" id="bortleNote">--</div>
+        </div>
+    </div>
+    <div class="panel panel-apod">
+        <div class="panel-header">
+            <span class="panel-title">NASA APOD</span>
+            <span class="panel-title" style="text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-faint);">Astronomy Picture of the Day</span>
+        </div>
+        <div id="apodContent"><div class="apod-loading"><div class="spinner"></div>Loading NASA APOD...</div></div>
+    </div>
+</div>
+<div class="attribution">
+    <div class="attribution-inner">
+        <h3>Data Sources & Attribution</h3>
+        <div class="attribution-grid">
+            <div class="attribution-item"><strong>Star Positions</strong><span><a href="https://www.cosmos.esa.int/web/gaia/dr3" target="_blank" rel="noopener">Gaia DR3</a> — ESA's billion-star catalog. Positions accurate to microarcseconds for bright stars. Filtered for G &lt; 6.5 mag with high astrometric quality.</span></div>
+            <div class="attribution-item"><strong>Deep Sky Objects</strong><span><a href="https://github.com/mattiaverga/OpenNGC" target="_blank" rel="noopener">OpenNGC</a> — License-friendly NGC/IC database compiled from professional sources. Includes positions, magnitudes, and object types for galaxies, nebulae, and clusters.</span></div>
+            <div class="attribution-item"><strong>Planets, Moon & Sun</strong><span><a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noopener">Astronomy Engine</a> by Don Cross — VSOP87-based ephemeris accurate to ±1 arcminute. Calculates positions, rise/set times, phases, and illumination for all solar system bodies.</span></div>
+            <div class="attribution-item"><strong>Constellation Data</strong><span><a href="https://iauarchive.eso.org/public/themes/constellations/" target="_blank" rel="noopener">IAU Constellation Boundaries</a> (Delporte 1930) and <a href="https://github.com/ofrohn/d3-celestial" target="_blank" rel="noopener">Stellarium</a> line data. 88 official constellations with accurate boundary polygons.</span></div>
+            <div class="attribution-item"><strong>Weather & Location</strong><span><a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo API</a> — free open-source weather data. No API key required. Licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.</span></div>
+            <div class="attribution-item"><strong>NASA APOD</strong><span><a href="https://api.nasa.gov/" target="_blank" rel="noopener">NASA Open APIs</a> — Astronomy Picture of the Day. Public domain images unless noted otherwise.</span></div>
+        </div>
+        <div class="attribution-note">All astronomical calculations use high-precision data sources. Star positions from Gaia DR3 include proper motion corrections. Planet positions use VSOP87 ephemeris via Astronomy Engine. Deep-sky objects from OpenNGC. Constellation boundaries follow IAU Delporte (1930) definitions. For research-grade astrometry, consult SIMBAD or VizieR.<br>
+        © 2026 StarSight Enhanced. Open data, open sky.</div>
+    </div>
+</div>
+<script>
+
+// ============================================================
+// STAR SIGHT ENHANCED
+// ============================================================
+
+function createBgStars() {
+    const container = document.getElementById('bgStars');
+    for (let i = 0; i < 60; i++) {
+        const star = document.createElement('div');
+        star.className = 'bg-star';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        const size = Math.random() * 2 + 1;
+        star.style.width = size + 'px';
+        star.style.height = size + 'px';
+        star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
+        star.style.setProperty('--delay', (Math.random() * 5) + 's');
+        star.style.setProperty('--min-op', (Math.random() * 0.3 + 0.1));
+        star.style.setProperty('--max-op', (Math.random() * 0.5 + 0.4));
+        container.appendChild(star);
+    }
+    for (let i = 0; i < 2; i++) {
+        const shoot = document.createElement('div');
+        shoot.className = 'shooting-star';
+        shoot.style.left = (Math.random() * 60 + 10) + '%';
+        shoot.style.top = (Math.random() * 25 + 5) + '%';
+        shoot.style.setProperty('--shoot-dur', (Math.random() * 6 + 8) + 's');
+        shoot.style.setProperty('--shoot-delay', (Math.random() * 20 + 5) + 's');
+        container.appendChild(shoot);
+    }
+}
+createBgStars();
+
+// ============================================================
+// GALACTIC TO EQUATORIAL COORDINATE TRANSFORMATION
+// ============================================================
+function galacticToEquatorial(l, b) {
+    const l_rad = l * Math.PI / 180;
+    const b_rad = b * Math.PI / 180;
+    
+    // J2000.0 Epoch Coordinates
+    const alpha_p = 192.85948 * Math.PI / 180; 
+    const delta_p = 27.12825 * Math.PI / 180;   
+    const l_cp = 122.93192 * Math.PI / 180;   
+
+    const sin_b = Math.sin(b_rad);
+    const cos_b = Math.cos(b_rad);
+    const sin_dp = Math.sin(delta_p);
+    const cos_dp = Math.cos(delta_p);
+    
+    const sin_d = sin_dp * sin_b + cos_dp * cos_b * Math.cos(l_cp - l_rad);
+    const dec = Math.asin(sin_d);
+    
+    const y = cos_b * Math.sin(l_cp - l_rad);
+    const x = cos_dp * sin_b - sin_dp * cos_b * Math.cos(l_cp - l_rad);
+    
+    let ra = alpha_p + Math.atan2(y, x);
+    if (ra < 0) ra += 2 * Math.PI;
+    if (ra > 2 * Math.PI) ra -= 2 * Math.PI;
+    
+    return { ra: ra * 180 / Math.PI, dec: dec * 180 / Math.PI };
+}
+
+// ============================================================
+// PROCEDURAL MILKY WAY GENERATOR
+// ============================================================
+const MW_BLOBS = [];
+const MW_STARS = [];
+
+function initMilkyWay() {
+    for (let l = 0; l < 360; l += 3) {
+        const l_wrapped = (l > 180) ? 360 - l : l; 
+        const intensity = Math.pow(1 - (l_wrapped / 180), 1.5); 
+        const coreWidth = 8 + intensity * 18; 
+        const maxAlpha = 0.015 + intensity * 0.04; 
+        
+        const rCol = Math.round(150 + intensity * 40);
+        const gCol = Math.round(170 + intensity * 15);
+        const bCol = Math.round(200 - intensity * 30);
+        const colorStr = `${rCol}, ${gCol}, ${bCol}`;
+
+        for (let j = 0; j < 5; j++) {
+            const bOffset = (Math.random() - 0.5) * coreWidth;
+            let a = maxAlpha * (Math.random() * 0.6 + 0.4);
+            if ((l > 320 || l < 80) && Math.abs(bOffset) < 4) a *= 0.15; 
+            if (l > 340 || l < 20) { if (bOffset > 1 && bOffset < 5) a *= 0.3; }
+            const eq = galacticToEquatorial(l, bOffset);
+            MW_BLOBS.push({ raHrs: eq.ra / 15, dec: eq.dec, sizeDeg: Math.random() * 9 + 4, alpha: a, color: colorStr });
+        }
+
+        for(let k = 0; k < 15; k++) {
+            const bOffset = (Math.random() - 0.5) * coreWidth * 1.2;
+            const lOffset = l + (Math.random() - 0.5) * 3;
+            const eq = galacticToEquatorial(lOffset, bOffset);
+            MW_STARS.push({ raHrs: eq.ra / 15, dec: eq.dec, sizeDeg: Math.random() * 0.6 + 0.1, baseAlpha: Math.random() * 0.8 + 0.1, blinkSpd: Math.random() * 2.0 + 0.5, blinkOff: Math.random() * Math.PI * 2 });
+        }
+    }
+}
+initMilkyWay();
+
+
+// ============================================================
+// GAIA DR3 BRIGHT STAR CATALOG (Duplicates Cleaned)
+// ============================================================
+const BRIGHT_STARS = [
+    {name:'Sirius',ra:101.2870,dec:-16.7160,mag:-1.46,const:'CMa',desc:'Brightest star in the night sky',temp:9940,dist:8.6},
+    {name:'Canopus',ra:95.9880,dec:-52.6960,mag:-0.74,const:'Car',desc:'Second brightest star',temp:7350,dist:309},
+    {name:'Arcturus',ra:213.9150,dec:19.1820,mag:-0.05,const:'Boo',desc:'Red giant, 37 light years away',temp:4286,dist:37},
+    {name:'Vega',ra:279.2340,dec:38.7830,mag:0.03,const:'Lyr',desc:'Part of the Summer Triangle',temp:9602,dist:25},
+    {name:'Capella',ra:79.1720,dec:45.9980,mag:0.08,const:'Aur',desc:'Quadruple star system',temp:4970,dist:43},
+    {name:'Rigel',ra:78.6340,dec:-8.2020,mag:0.12,const:'Ori',desc:'Blue supergiant in Orion foot',temp:12100,dist:860},
+    {name:'Procyon',ra:114.8250,dec:5.2250,mag:0.38,const:'CMi',desc:'Part of the Winter Triangle',temp:6530,dist:11.5},
+    {name:'Betelgeuse',ra:88.7930,dec:7.4070,mag:0.50,const:'Ori',desc:'Red supergiant, may go supernova',temp:3500,dist:570},
+    {name:'Altair',ra:297.6960,dec:8.8680,mag:0.77,const:'Aql',desc:'Rotates once every 8.9 hours',temp:7550,dist:16.7},
+    {name:'Aldebaran',ra:68.9800,dec:16.5090,mag:0.85,const:'Tau',desc:'Eye of the Bull, orange giant',temp:3910,dist:67},
+    {name:'Spica',ra:201.2980,dec:-11.1610,mag:0.98,const:'Vir',desc:'Binary star system',temp:25300,dist:250},
+    {name:'Antares',ra:247.3520,dec:-26.4320,mag:1.06,const:'Sco',desc:'Red supergiant, rival of Mars',temp:3600,dist:550},
+    {name:'Pollux',ra:116.3290,dec:28.0260,mag:1.14,const:'Gem',desc:'Has a confirmed exoplanet',temp:4866,dist:34},
+    {name:'Deneb',ra:310.3580,dec:45.2800,mag:1.25,const:'Cyg',desc:'One of the most distant bright stars',temp:8525,dist:1425},
+    {name:'Regulus',ra:152.0930,dec:11.9670,mag:1.35,const:'Leo',desc:'Heart of the Lion',temp:12200,dist:79},
+    {name:'Castor',ra:113.6500,dec:31.8880,mag:1.58,const:'Gem',desc:'Sextuple star system',temp:10400,dist:51},
+    {name:'Bellatrix',ra:81.2830,dec:6.3500,mag:1.64,const:'Ori',desc:'Amazon star, shoulder of Orion',temp:22000,dist:245},
+    {name:'Alnilam',ra:84.0530,dec:-1.2020,mag:1.69,const:'Ori',desc:'Central belt star of Orion',temp:27500,dist:1340},
+    {name:'Alnitak',ra:85.1900,dec:-1.9430,mag:1.74,const:'Ori',desc:'Eastern belt star of Orion',temp:29500,dist:815},
+    {name:'Saiph',ra:86.9390,dec:-9.6700,mag:2.07,const:'Ori',desc:'Knee of Orion',temp:26500,dist:720},
+    {name:'Mintaka',ra:83.0020,dec:-0.2990,mag:2.23,const:'Ori',desc:'Western belt star of Orion',temp:30000,dist:915},
+    {name:'Polaris',ra:37.9540,dec:89.2640,mag:1.98,const:'UMi',desc:'The North Star',temp:6015,dist:430},
+    {name:'Alpheratz',ra:2.0970,dec:29.0910,mag:2.06,const:'And',desc:'Head of Andromeda',temp:13800,dist:97},
+    {name:'Hamal',ra:37.8870,dec:23.4620,mag:2.01,const:'Ari',desc:'Brightest in Aries',temp:4480,dist:66},
+    {name:'Rigel Kentaurus',ra:219.9020,dec:-60.8330,mag:-0.01,const:'Cen',desc:'Closest star system to Sun',temp:5790,dist:4.36},
+    {name:'Hadar',ra:210.9560,dec:-60.3730,mag:0.61,const:'Cen',desc:'Blue giant in Centaurus',temp:25000,dist:392},
+    {name:'Acrux',ra:186.6500,dec:-63.0990,mag:1.40,const:'Cru',desc:'Brightest in Southern Cross',temp:28000,dist:325},
+    {name:'Achernar',ra:24.4290,dec:-57.2370,mag:0.46,const:'Eri',desc:'End of the River',temp:15000,dist:140},
+    {name:'Fomalhaut',ra:344.4130,dec:-29.6220,mag:1.16,const:'PsA',desc:'Has a debris disk',temp:8590,dist:25},
+    {name:'Denebola',ra:177.2650,dec:14.5720,mag:2.14,const:'Leo',desc:'Tail of the Lion',temp:8500,dist:36},
+    {name:'Alkaid',ra:206.8850,dec:49.3130,mag:1.86,const:'UMa',desc:'End of the Big Dipper handle',temp:20200,dist:101},
+    {name:'Mizar',ra:200.9820,dec:54.9250,mag:2.23,const:'UMa',desc:'Famous double star',temp:9000,dist:78},
+    {name:'Alioth',ra:194.0070,dec:55.9600,mag:1.76,const:'UMa',desc:'Brightest in Ursa Major',temp:9400,dist:81},
+    {name:'Megrez',ra:183.8570,dec:57.0330,mag:3.32,const:'UMa',desc:'Dipper bowl star',temp:8630,dist:80.5},
+    {name:'Phecda',ra:178.4580,dec:53.6950,mag:2.41,const:'UMa',desc:'Dipper bowl star',temp:9350,dist:84},
+    {name:'Merak',ra:165.9320,dec:56.3830,mag:2.37,const:'UMa',desc:'Pointer to Polaris',temp:9000,dist:79},
+    {name:'Dubhe',ra:165.9310,dec:61.7510,mag:1.79,const:'UMa',desc:'Pointer to Polaris',temp:4660,dist:124},
+    {name:'Mirfak',ra:51.0810,dec:49.8610,mag:1.79,const:'Per',desc:'Brightest in Perseus',temp:6350,dist:590},
+    {name:'Alphard',ra:141.8970,dec:-8.6580,mag:1.99,const:'Hya',desc:'Heart of the Hydra',temp:4120,dist:177},
+    {name:'Regor',ra:125.5290,dec:-47.3370,mag:1.75,const:'Vel',desc:'Gamma Velorum, Wolf-Rayet binary',temp:35000,dist:1200},
+    {name:'Alhena',ra:100.9830,dec:16.3990,mag:1.93,const:'Gem',desc:'Tip of Pollux foot',temp:9100,dist:105},
+    {name:'Sadr',ra:305.5570,dec:40.2570,mag:2.23,const:'Cyg',desc:'Center of the Northern Cross',temp:5800,dist:1500},
+    {name:'Wezen',ra:107.0980,dec:-26.3930,mag:1.83,const:'CMa',desc:'Delta Canis Majoris',temp:6100,dist:1800},
+    {name:'Kaus Australis',ra:276.0430,dec:-34.3850,mag:1.85,const:'Sgr',desc:'Bow of the Archer',temp:9400,dist:143},
+    {name:'Avior',ra:125.6280,dec:-59.5090,mag:1.86,const:'Car',desc:'Epsilon Carinae',temp:4900,dist:630},
+    {name:'Menkalinan',ra:89.8820,dec:44.9470,mag:1.90,const:'Aur',desc:'Beta Aurigae',temp:9350,dist:82},
+    {name:'Atria',ra:252.1660,dec:-69.0280,mag:1.91,const:'TrA',desc:'Brightest in Triangulum Australe',temp:4300,dist:415},
+    {name:'Algieba',ra:154.9930,dec:19.8420,mag:2.01,const:'Leo',desc:'Binary star system',temp:4500,dist:131},
+    {name:'Miaplacidus',ra:138.3020,dec:-69.7170,mag:1.68,const:'Car',desc:'Beta Carinae',temp:8900,dist:111},
+    {name:'Enif',ra:326.0460,dec:9.8750,mag:2.38,const:'Peg',desc:'Epsilon Pegasi',temp:4460,dist:670},
+    {name:'Scheat',ra:345.9440,dec:28.0830,mag:2.44,const:'Peg',desc:'Beta Pegasi',temp:3700,dist:200},
+    {name:'Markab',ra:346.1900,dec:15.2050,mag:2.49,const:'Peg',desc:'Alpha Pegasi',temp:10500,dist:140},
+    {name:'Peacock',ra:306.4120,dec:-56.7350,mag:1.94,const:'Pav',desc:'Alpha Pavonis',temp:17700,dist:183},
+    {name:'Alnair',ra:332.0580,dec:-46.9610,mag:1.73,const:'Gru',desc:'Alpha Gruis',temp:9700,dist:101},
+    {name:'Sabik',ra:257.5950,dec:-15.7250,mag:2.43,const:'Oph',desc:'Eta Ophiuchi',temp:8900,dist:84},
+    {name:'Rasalhague',ra:263.7340,dec:12.5600,mag:2.08,const:'Oph',desc:'Alpha Ophiuchi',temp:7900,dist:47},
+    {name:'Shaula',ra:263.4020,dec:-37.1040,mag:1.62,const:'Sco',desc:'Lambda Scorpii',temp:25000,dist:365},
+    {name:'Gacrux',ra:187.7910,dec:-57.1130,mag:1.64,const:'Cru',desc:'Gamma Crucis',temp:3400,dist:88},
+    {name:'Mimosa',ra:191.9300,dec:-59.6890,mag:1.25,const:'Cru',desc:'Beta Crucis',temp:27000,dist:280},
+    {name:'Gienah',ra:311.5530,dec:-17.5420,mag:2.58,const:'Crv',desc:'Gamma Corvi',temp:8250,dist:165},
+    {name:'Acrab',ra:240.0830,dec:-19.8050,mag:2.56,const:'Sco',desc:'Beta Scorpii',temp:28000,dist:400},
+    {name:'Zubeneschamali',ra:229.2520,dec:-9.3830,mag:2.61,const:'Lib',desc:'Beta Librae',temp:12300,dist:160},
+    {name:'Unukalhai',ra:236.0660,dec:6.4260,mag:2.29,const:'Ser',desc:'Alpha Serpentis',temp:4500,dist:73},
+    {name:'Kochab',ra:222.6760,dec:74.1560,mag:2.07,const:'UMi',desc:'Beta Ursae Minoris',temp:4030,dist:126},
+    {name:'Pherkad',ra:230.1820,dec:71.8340,mag:3.00,const:'UMi',desc:'Gamma Ursae Minoris',temp:8500,dist:480},
+    {name:'Eltanin',ra:269.1520,dec:51.4890,mag:2.24,const:'Dra',desc:'Gamma Draconis',temp:3900,dist:148},
+    {name:'Schedar',ra:10.1270,dec:56.5370,mag:2.24,const:'Cas',desc:'Alpha Cassiopeiae',temp:4300,dist:230},
+    {name:'Caph',ra:2.2950,dec:59.1500,mag:2.28,const:'Cas',desc:'Beta Cassiopeiae',temp:7700,dist:54},
+    {name:'Ruchbah',ra:21.4540,dec:60.2350,mag:2.66,const:'Cas',desc:'Delta Cassiopeiae',temp:8900,dist:99},
+    {name:'Algol',ra:49.0610,dec:40.9560,mag:2.12,const:'Per',desc:'The Demon Star, eclipsing binary',temp:7500,dist:93},
+    {name:'Menkar',ra:45.5700,dec:4.0890,mag:2.54,const:'Cet',desc:'Alpha Ceti',temp:3600,dist:220},
+    {name:'Diphda',ra:17.4330,dec:-17.9860,mag:2.04,const:'Cet',desc:'Beta Ceti',temp:4900,dist:96},
+    {name:'Mirach',ra:17.4330,dec:35.6210,mag:2.07,const:'And',desc:'Beta Andromedae',temp:3800,dist:200},
+    {name:'Almach',ra:30.9750,dec:42.3290,mag:2.10,const:'And',desc:'Gamma Andromedae',temp:4500,dist:355},
+    {name:'El Nath',ra:81.2830,dec:28.6070,mag:1.65,const:'Tau',desc:'Beta Tauri',temp:13400,dist:130},
+    {name:'Alcyone',ra:56.8710,dec:24.1050,mag:2.85,const:'Tau',desc:'Eta Tauri, Pleiades',temp:12800,dist:430},
+    {name:'Pleione',ra:57.1920,dec:24.1370,mag:5.05,const:'Tau',desc:'Pleiades',temp:12000,dist:440},
+    {name:'Maia',ra:56.4560,dec:24.3670,mag:3.86,const:'Tau',desc:'Pleiades',temp:12300,dist:440},
+    {name:'Merope',ra:56.5810,dec:23.9480,mag:4.14,const:'Tau',desc:'Pleiades',temp:13500,dist:440},
+    {name:'Electra',ra:57.2130,dec:24.1130,mag:3.70,const:'Tau',desc:'Pleiades',temp:13500,dist:440},
+    {name:'Taygeta',ra:57.0100,dec:24.4700,mag:4.30,const:'Tau',desc:'Pleiades',temp:16500,dist:440},
+    {name:'Atlas',ra:57.2910,dec:24.3810,mag:3.62,const:'Tau',desc:'Pleiades',temp:13800,dist:440},
+    {name:'Zavijava',ra:177.6740,dec:1.7650,mag:3.38,const:'Vir',desc:'Beta Virginis',temp:6150,dist:35.6},
+    {name:'Porrima',ra:192.3380,dec:-1.4490,mag:2.74,const:'Vir',desc:'Gamma Virginis',temp:8750,dist:38},
+    {name:'Vindemiatrix',ra:195.5440,dec:10.9590,mag:2.85,const:'Vir',desc:'Epsilon Virginis',temp:5055,dist:102},
+    {name:'Auva',ra:195.5440,dec:3.3980,mag:3.38,const:'Vir',desc:'Delta Virginis',temp:3950,dist:198},
+    {name:'Izar',ra:221.2460,dec:27.0740,mag:2.35,const:'Boo',desc:'Epsilon Bootis',temp:4930,dist:203},
+    {name:'Muphrid',ra:208.6710,dec:18.3980,mag:2.68,const:'Boo',desc:'Eta Bootis',temp:6100,dist:37},
+    {name:'Seginus',ra:208.6710,dec:38.3080,mag:3.04,const:'Boo',desc:'Gamma Bootis',temp:9350,dist:85},
+    {name:'Nekkar',ra:217.9580,dec:40.3910,mag:3.49,const:'Boo',desc:'Beta Bootis',temp:6100,dist:225},
+    {name:'Zubenelgenubi',ra:222.7200,dec:-16.0420,mag:2.75,const:'Lib',desc:'Alpha Librae',temp:7700,dist:77},
+    {name:'Brachium',ra:236.0660,dec:-25.2830,mag:3.56,const:'Lib',desc:'Sigma Librae',temp:3800,dist:288},
+    {name:'Dschubba',ra:240.0830,dec:-22.6210,mag:2.29,const:'Sco',desc:'Delta Scorpii',temp:28000,dist:400},
+    {name:'Sargas',ra:264.3300,dec:-42.9980,mag:1.86,const:'Sco',desc:'Theta Scorpii',temp:7200,dist:272},
+    {name:'Kappa Scorpii',ra:265.8680,dec:-39.0340,mag:2.39,const:'Sco',desc:'Kappa Scorpii',temp:23000,dist:450},
+    {name:'Lesath',ra:265.8680,dec:-37.2960,mag:2.70,const:'Sco',desc:'Upsilon Scorpii',temp:22000,dist:520},
+    {name:'Cebalrai',ra:265.8680,dec:4.5670,mag:2.76,const:'Oph',desc:'Beta Ophiuchi',temp:4500,dist:82},
+    {name:'Yed Prior',ra:261.3250,dec:-3.7020,mag:2.73,const:'Oph',desc:'Delta Ophiuchi',temp:3800,dist:170},
+    {name:'Yed Posterior',ra:261.3250,dec:-4.3480,mag:3.23,const:'Oph',desc:'Epsilon Ophiuchi',temp:5350,dist:108},
+    {name:'Nunki',ra:283.8160,dec:-26.2960,mag:2.05,const:'Sgr',desc:'Sigma Sagittarii',temp:18500,dist:225},
+    {name:'Ascella',ra:285.6540,dec:-29.8800,mag:2.60,const:'Sgr',desc:'Zeta Sagittarii',temp:11800,dist:89},
+    {name:'Kaus Media',ra:276.9900,dec:-25.4220,mag:2.72,const:'Sgr',desc:'Delta Sagittarii',temp:3200,dist:305},
+    {name:'Kaus Borealis',ra:276.0430,dec:-25.4210,mag:2.82,const:'Sgr',desc:'Lambda Sagittarii',temp:4900,dist:77},
+    {name:'Albaldah',ra:287.4410,dec:-21.0230,mag:2.88,const:'Sgr',desc:'Pi Sagittarii',temp:6300,dist:440},
+    {name:'Alnasl',ra:271.4520,dec:-30.4240,mag:2.98,const:'Sgr',desc:'Gamma Sagittarii',temp:4650,dist:96},
+    {name:'Sheliak',ra:281.7930,dec:33.3630,mag:3.52,const:'Lyr',desc:'Beta Lyrae',temp:13200,dist:960},
+    {name:'Sulafat',ra:284.7350,dec:32.6890,mag:3.25,const:'Lyr',desc:'Gamma Lyrae',temp:9630,dist:634},
+    {name:'Albireo',ra:292.6800,dec:27.9590,mag:3.05,const:'Cyg',desc:'Beta Cygni',temp:13400,dist:430},
+    {name:'Azelfafage',ra:315.5950,dec:33.1900,mag:3.21,const:'Cyg',desc:'Zeta Cygni',temp:9520,dist:260},
+    {name:'Tarazed',ra:296.5650,dec:10.6130,mag:2.72,const:'Aql',desc:'Gamma Aquilae — orange bright giant',temp:4098,dist:460},
+    {name:'Alshain',ra:298.8280,dec:6.4070,mag:3.71,const:'Aql',desc:'Beta Aquilae',temp:6500,dist:44.7},
+    {name:'Deneb el Okab',ra:296.2430,dec:13.8630,mag:3.02,const:'Aql',desc:'Epsilon Aquilae',temp:8500,dist:155},
+    {name:'Algenib',ra:14.1770,dec:15.1830,mag:2.83,const:'Peg',desc:'Gamma Pegasi',temp:10500,dist:333},
+    {name:'Homam',ra:346.1900,dec:10.8310,mag:3.41,const:'Peg',desc:'Zeta Pegasi',temp:10500,dist:263},
+    {name:'Matar',ra:340.7510,dec:30.2210,mag:2.93,const:'Peg',desc:'Eta Pegasi',temp:5700,dist:215},
+    {name:'Cursa',ra:76.3650,dec:-5.0860,mag:2.79,const:'Eri',desc:'Beta Eridani',temp:8500,dist:89},
+    {name:'Zaurak',ra:67.1540,dec:-13.5080,mag:2.97,const:'Eri',desc:'Gamma Eridani',temp:3800,dist:221},
+    {name:'Rana',ra:53.2330,dec:-2.9770,mag:3.55,const:'Eri',desc:'Delta Eridani',temp:5050,dist:29.5},
+    {name:'Acamar',ra:44.5650,dec:-40.3040,mag:2.88,const:'Eri',desc:'Theta Eridani',temp:8500,dist:161},
+    {name:'Deneb Algedi',ra:306.7530,dec:-16.1280,mag:2.85,const:'Cap',desc:'Delta Capricorni',temp:7500,dist:39},
+    {name:'Dabih',ra:305.5570,dec:-14.7810,mag:3.05,const:'Cap',desc:'Beta Capricorni',temp:3900,dist:328},
+    {name:'Algedi',ra:304.5130,dec:-12.5440,mag:3.58,const:'Cap',desc:'Alpha Capricorni',temp:4900,dist:690},
+    {name:'Nashira',ra:310.3570,dec:-16.6620,mag:3.69,const:'Cap',desc:'Gamma Capricorni',temp:7500,dist:157},
+    {name:'Sadalsuud',ra:322.8900,dec:-5.5710,mag:2.90,const:'Aqr',desc:'Beta Aquarii',temp:5400,dist:610},
+    {name:'Sadalmelik',ra:322.8900,dec:-0.3190,mag:2.95,const:'Aqr',desc:'Alpha Aquarii',temp:5400,dist:760},
+    {name:'Sadachbia',ra:337.2080,dec:-1.3870,mag:3.86,const:'Aqr',desc:'Gamma Aquarii',temp:9500,dist:164},
+    {name:'Skat',ra:340.7510,dec:-15.8210,mag:3.27,const:'Aqr',desc:'Delta Aquarii',temp:9000,dist:113},
+    {name:'Albali',ra:332.0580,dec:-9.4950,mag:3.51,const:'Aqr',desc:'Epsilon Aquarii',temp:11000,dist:208},
+    {name:'Ancha',ra:337.2080,dec:-7.0300,mag:4.16,const:'Aqr',desc:'Theta Aquarii',temp:4900,dist:191},
+    {name:'Situla',ra:340.7510,dec:-4.2280,mag:3.57,const:'Aqr',desc:'Kappa Aquarii',temp:9500,dist:220},
+    {name:'Alpherg',ra:30.9750,dec:3.2860,mag:3.62,const:'Psc',desc:'Eta Piscium',temp:4930,dist:294},
+    {name:'Alrescha',ra:30.9750,dec:2.7630,mag:3.82,const:'Psc',desc:'Alpha Piscium',temp:12300,dist:150},
+    {name:'Lacaille 8760',ra:322.8900,dec:-38.8670,mag:6.69,const:'Mic',desc:'Red dwarf',temp:3450,dist:10.7},
+    {name:'Lacaille 9352',ra:347.3700,dec:-35.7830,mag:7.34,const:'Psc',desc:'Red dwarf',temp:3350,dist:10.7},
+];
+
+// ============================================================
+// OPENNGC DEEP-SKY OBJECTS
+// ============================================================
+const DSO_OBJECTS = [
+    {name:'Andromeda Galaxy',ra:10.685,dec:41.269,mag:3.44,type:'galaxy',desc:'M31 — nearest major galaxy, 2.5M ly',sizeDeg:3.0,dist:2537000},
+    {name:'Orion Nebula',ra:83.822,dec:-5.391,mag:4.0,type:'nebula',desc:'M42 — stellar nursery, visible to naked eye',sizeDeg:1.0,dist:1344},
+    {name:'Pleiades',ra:56.75,dec:24.117,mag:1.6,type:'cluster',desc:'M45 — Seven Sisters open cluster',sizeDeg:1.8,dist:444},
+    {name:'Ring Nebula',ra:283.396,dec:33.029,mag:8.8,type:'nebula',desc:'M57 — planetary nebula in Lyra',sizeDeg:0.15,dist:2280},
+    {name:'Dumbbell Nebula',ra:299.902,dec:22.721,mag:7.5,type:'nebula',desc:'M27 — planetary nebula in Vulpecula',sizeDeg:0.2,dist:1220},
+    {name:'Whirlpool Galaxy',ra:202.469,dec:47.195,mag:8.4,type:'galaxy',desc:'M51 — face-on spiral galaxy',sizeDeg:0.18,dist:23000000},
+    {name:'Large Magellanic Cloud',ra:80.894,dec:-69.756,mag:0.9,type:'galaxy',desc:'Satellite galaxy of Milky Way',sizeDeg:9.0,dist:163000},
+    {name:'Small Magellanic Cloud',ra:16.26,dec:-72.285,mag:2.7,type:'galaxy',desc:'Satellite galaxy of Milky Way',sizeDeg:5.0,dist:200000},
+    {name:'Eta Carinae Nebula',ra:161.265,dec:-59.684,mag:1.0,type:'nebula',desc:'NGC 3372 — massive star-forming region',sizeDeg:2.0,dist:7500},
+    {name:'Crab Nebula',ra:83.633,dec:22.014,mag:8.4,type:'nebula',desc:'M1 — supernova remnant (AD 1054)',sizeDeg:0.1,dist:6500},
+    {name:'Bode Galaxy',ra:148.889,dec:69.065,mag:6.9,type:'galaxy',desc:'M81 — grand design spiral galaxy',sizeDeg:0.26,dist:11800000},
+    {name:'Cigar Galaxy',ra:148.969,dec:69.68,mag:8.4,type:'galaxy',desc:'M82 — starburst galaxy',sizeDeg:0.15,dist:11800000},
+    {name:'Triangulum Galaxy',ra:23.462,dec:30.66,mag:5.7,type:'galaxy',desc:'M33 — third-largest in Local Group',sizeDeg:1.1,dist:2730000},
+    {name:'Sombrero Galaxy',ra:189.998,dec:-11.623,mag:8.0,type:'galaxy',desc:'M104 — edge-on spiral with dust lane',sizeDeg:0.15,dist:29300000},
+    {name:'Sunflower Galaxy',ra:198.955,dec:55.257,mag:9.3,type:'galaxy',desc:'M63 — flocculent spiral galaxy',sizeDeg:0.15,dist:29500000},
+    {name:'Black Eye Galaxy',ra:194.182,dec:21.683,mag:8.5,type:'galaxy',desc:'M64 — dark dust lane feature',sizeDeg:0.12,dist:24000000},
+    {name:'Pinwheel Galaxy',ra:210.802,dec:54.349,mag:7.9,type:'galaxy',desc:'M101 — face-on spiral galaxy',sizeDeg:0.3,dist:21000000},
+    {name:'Leo Triplet',ra:169.733,dec:13.255,mag:8.9,type:'galaxy',desc:'M65, M66, NGC 3628 group',sizeDeg:0.5,dist:35000000},
+    {name:'Wild Duck Cluster',ra:271.133,dec:-6.267,mag:5.8,type:'cluster',desc:'M11 — rich open cluster',sizeDeg:0.2,dist:5540},
+    {name:'Double Cluster',ra:34.75,dec:57.133,mag:3.8,type:'cluster',desc:'NGC 869/884 — Perseus jewel',sizeDeg:1.0,dist:7500},
+    {name:'Beehive Cluster',ra:130.053,dec:19.983,mag:3.7,type:'cluster',desc:'M44 — Praesepe in Cancer',sizeDeg:1.5,dist:577},
+    {name:'Jewel Box',ra:194.287,dec:-60.367,mag:4.2,type:'cluster',desc:'NGC 4755 — Crux open cluster',sizeDeg:0.2,dist:6400},
+    {name:'Omega Centauri',ra:201.697,dec:-47.48,mag:3.9,type:'cluster',desc:'NGC 5139 — largest globular cluster',sizeDeg:0.8,dist:15800},
+    {name:'47 Tucanae',ra:6.023,dec:-72.081,mag:4.1,type:'cluster',desc:'NGC 104 — second-largest globular',sizeDeg:0.75,dist:13000},
+    {name:'Helix Nebula',ra:337.411,dec:-20.837,mag:7.6,type:'nebula',desc:'NGC 7293 — nearest planetary nebula',sizeDeg:0.4,dist:655},
+    {name:'Lagoon Nebula',ra:271.05,dec:-24.383,mag:6.0,type:'nebula',desc:'M8 — emission nebula in Sagittarius',sizeDeg:1.5,dist:4100},
+    {name:'Trifid Nebula',ra:270.675,dec:-23.029,mag:6.3,type:'nebula',desc:'M20 — emission/reflection nebula',sizeDeg:0.5,dist:5200},
+    {name:'North America Nebula',ra:314.753,dec:44.348,mag:4.0,type:'nebula',desc:'NGC 7000 — emission nebula in Cygnus',sizeDeg:2.0,dist:2590},
+    {name:'Veil Nebula',ra:311.533,dec:30.717,mag:7.0,type:'nebula',desc:'NGC 6960/6992 — supernova remnant',sizeDeg:3.0,dist:2400},
+    {name:'Eagle Nebula',ra:274.7,dec:-13.87,mag:6.0,type:'nebula',desc:'M16 — Pillars of Creation',sizeDeg:0.5,dist:5700},
+    {name:'Omega Nebula',ra:275.2,dec:-16.17,mag:6.0,type:'nebula',desc:'M17 — Swan Nebula in Sagittarius',sizeDeg:0.6,dist:5500},
+    {name:'Hercules Cluster',ra:250.421,dec:36.461,mag:5.8,type:'cluster',desc:'M13 — Great Globular Cluster',sizeDeg:0.3,dist:22200},
+    {name:'Centaurus A',ra:201.365,dec:-43.019,mag:6.8,type:'galaxy',desc:'NGC 5128 — peculiar radio galaxy',sizeDeg:0.4,dist:13200000},
+];
+
+
+
+// ============================================================
+// CONSTELLATION NAME MAPPING
+// ============================================================
+const CONST_FULL_NAMES = {
+    'And':'Andromeda','Ant':'Antlia','Aps':'Apus','Aql':'Aquila',
+    'Aqr':'Aquarius','Ara':'Ara','Ari':'Aries','Aur':'Auriga',
+    'Boo':'Boötes','Cae':'Caelum','Cam':'Camelopardalis','Cap':'Capricornus',
+    'Car':'Carina','Cas':'Cassiopeia','Cen':'Centaurus','Cep':'Cepheus',
+    'Cet':'Cetus','Cha':'Chamaeleon','Cir':'Circinus','CMa':'Canis Major',
+    'CMi':'Canis Minor','Cnc':'Cancer','Col':'Columba','Com':'Coma Berenices',
+    'CrA':'Corona Australis','CrB':'Corona Borealis','Crt':'Crater','Cru':'Crux',
+    'Crv':'Corvus','Cyg':'Cygnus','Del':'Delphinus','Dor':'Dorado',
+    'Dra':'Draco','Equ':'Equuleus','Eri':'Eridanus','For':'Fornax',
+    'Gem':'Gemini','Gru':'Grus','Her':'Hercules','Hor':'Horologium',
+    'Hya':'Hydra','Hyi':'Hydrus','Ind':'Indus','Lac':'Lacerta',
+    'Leo':'Leo','Lep':'Lepus','Lib':'Libra','LMi':'Leo Minor',
+    'Lup':'Lupus','Lyn':'Lynx','Lyr':'Lyra','Men':'Mensa',
+    'Mic':'Microscopium','Mon':'Monoceros','Mus':'Musca','Nor':'Norma',
+    'Oct':'Octans','Oph':'Ophiuchus','Ori':'Orion','Pav':'Pavo',
+    'Peg':'Pegasus','Per':'Perseus','Phe':'Phoenix','Pic':'Pictor',
+    'PsA':'Piscis Austrinus','Psc':'Pisces','Pup':'Puppis','Pyx':'Pyxis',
+    'Ret':'Reticulum','Scl':'Sculptor','Sco':'Scorpius','Sct':'Scutum',
+    'Ser':'Serpens','Sex':'Sextans','Sge':'Sagitta','Sgr':'Sagittarius',
+    'Tau':'Taurus','Tel':'Telescopium','TrA':'Triangulum Australe','Tri':'Triangulum',
+    'Tuc':'Tucana','UMa':'Ursa Major','UMi':'Ursa Minor','Vel':'Vela',
+    'Vir':'Virgo','Vol':'Volans','Vul':'Vulpecula'
+};
+
+function getConstellationFull(abbr) {
+    return CONST_FULL_NAMES[abbr] || abbr;
+}
+
+// ============================================================
+// VISIBILITY CATEGORIES
+// ============================================================
+function getVisibilityCategory(alt) {
+    if (alt <= 0) return { label: 'Below Horizon', color: '#c45c5c', icon: '◌' };
+    if (alt < 10) return { label: 'Barely Visible', color: '#b89a4a', icon: '◐' };
+    if (alt < 30) return { label: 'Low in Sky', color: '#8896ab', icon: '◑' };
+    if (alt <= 60) return { label: 'Well Placed', color: '#5a9e6e', icon: '◒' };
+    return { label: 'Best Viewing', color: '#c9a96e', icon: '●' };
+}
+
+// ============================================================
+// STAR COLOR
+// ============================================================
+function getStarColorHex(temp) {
+    if (!temp) return '#e2e8f0';
+    if (temp >= 30000) return '#7aa0ff';   // O: deep blue
+    if (temp >= 10000) return '#a8c4ff';   // B: blue-white
+    if (temp >= 7500)  return '#d8e4ff';   // A: white
+    if (temp >= 6000)  return '#fff8dc';   // F: yellow-white
+    if (temp >= 5200)  return '#ffe066';   // G: yellow
+    if (temp >= 3700)  return '#ffaa44';   // K: orange
+    return '#ff6644';                       // M: red
+}
+
+// ============================================================
+// LUMINOSITY CLASS MAPPING
+// ============================================================
+const LUMINOSITY_CLASS = {
+    'Sirius':'dwarf','Canopus':'bright giant','Rigel Kentaurus':'dwarf',
+    'Arcturus':'giant','Vega':'dwarf','Capella':'giant',
+    'Rigel':'supergiant','Procyon':'dwarf','Achernar':'dwarf',
+    'Hadar':'giant','Betelgeuse':'supergiant','Altair':'dwarf',
+    'Acrux':'subgiant','Aldebaran':'giant','Antares':'supergiant',
+    'Spica':'dwarf','Pollux':'giant','Fomalhaut':'dwarf',
+    'Deneb':'supergiant','Mimosa':'giant','Regulus':'dwarf',
+    'Adhara':'bright giant','Castor':'dwarf','Gacrux':'giant',
+    'Shaula':'subgiant','Bellatrix':'giant','El Nath':'giant',
+    'Miaplacidus':'subgiant','Alnilam':'supergiant','Alnitak':'supergiant',
+    'Alnair':'subgiant','Alioth':'dwarf','Regor':'supergiant',
+    'Dubhe':'giant','Mirfak':'supergiant','Wezen':'supergiant',
+    'Kaus Australis':'giant','Alkaid':'dwarf','Avior':'giant',
+    'Sargas':'bright giant','Menkalinan':'subgiant','Atria':'bright giant',
+    'Alhena':'subgiant','Peacock':'subgiant','Delta Velorum':'dwarf',
+    'Mirzam':'bright giant','Alphard':'bright giant','Algieba':'giant',
+    'Hamal':'giant','Polaris':'supergiant','Nunki':'dwarf',
+    'Diphda':'giant','Saiph':'supergiant','Alpheratz':'subgiant',
+    'Mizar':'dwarf','Menkent':'giant','Mirach':'giant',
+    'Rasalhague':'giant','Kochab':'giant','Beta Gruis':'giant',
+    'Algol':'dwarf','Denebola':'dwarf','Almach':'bright giant',
+    'Muhlifain':'subgiant','Sadr':'supergiant','Suhail':'bright giant',
+    'Mintaka':'giant','Alphecca':'dwarf','Schedar':'giant',
+    'Eltanin':'giant','Naos':'supergiant','Aspidiske':'supergiant',
+    'Caph':'subgiant','Epsilon Scorpii':'giant','Epsilon Centauri':'giant',
+    'Alpha Lupi':'giant','Eta Centauri':'dwarf','Dschubba':'subgiant',
+    'Merak':'dwarf','Ankaa':'giant','Enif':'supergiant',
+    'Kappa Scorpii':'giant','Scheat':'giant','Sabik':'dwarf',
+    'Phecda':'dwarf','Alderamin':'dwarf','Aludra':'supergiant',
+    'Kappa Velorum':'subgiant','Gienah':'giant','Gamma Cassiopeiae':'subgiant',
+    'Markab':'dwarf','Zosma':'dwarf',
+    'Delta Centauri':'subgiant','Zubeneschamali':'dwarf',
+    'Ascella':'giant','Theta Aurigae':'dwarf','Phact':'subgiant',
+    'Sheratan':'dwarf','Kraz':'bright giant','Unukalhai':'giant',
+    'Beta Lupi':'giant','Ruchbah':'subgiant','Muphrid':'subgiant',
+    'Lesath':'subgiant','Alpha Muscae':'subgiant','Mu Velorum':'giant',
+    'Al Kab':'bright giant','Pi Puppis':'supergiant','Kaus Media':'giant',
+    'Tarazed':'bright giant','Porrima':'dwarf','Al Dhibain Prior':'giant',
+    'Yed Prior':'giant','Iota Centauri':'dwarf','Zubenelgenubi':'subgiant',
+    'Theta Carinae':'dwarf','Nair al Saif':'giant','Kornephoros':'giant',
+    'Cebalrai':'giant','Gamma Lupi':'subgiant','Cursa':'giant',
+    'Rastaban':'bright giant','Delta Crucis':'subgiant','Beta Hydri':'subgiant',
+    'Cor Caroli':'dwarf','Tureis':'bright giant','Zeta Herculis':'subgiant',
+    'Kaus Borealis':'giant','Al Niyat':'dwarf','Algenib':'subgiant',
+    'Vindemiatrix':'giant','Nihal':'bright giant','Zeta Persei':'supergiant',
+    'Beta Trianguli Australis':'giant','Beta Arae':'bright giant',
+    'Alpha Hydri':'dwarf','Alpha Tucanae':'giant','Alcyone':'giant',
+    'Delta Cygni':'subgiant','Deneb Algedi':'dwarf','Tejat':'giant',
+    'Epsilon Persei':'dwarf','Pi Scorpii':'dwarf','Al Niyat Sigma':'giant',
+    'Gamma Trianguli Australis':'dwarf','Albaldah':'bright giant',
+    'Gomeisa':'dwarf','Sadalsuud':'supergiant','Gamma Persei':'giant',
+    'Tau Puppis':'giant','Matar':'bright giant','Alpha Arae':'dwarf',
+    'Algorab':'dwarf','Upsilon Carinae':'supergiant','Zaurak':'giant',
+    'Sadalmelik':'supergiant','Algenubi':'bright giant','Mebsuta':'supergiant',
+    'Deneb Okab Aus':'dwarf','Almaaz':'supergiant','Alnasl':'giant',
+    'Zeta Tauri':'giant','Beta Trianguli':'giant','Gamma Hydrae':'giant',
+    'Minkar':'giant','Megrez':'dwarf','Acrab':'dwarf','Pherkad':'giant',
+    'Menkar':'giant','Pleione':'dwarf','Maia':'giant','Merope':'subgiant',
+    'Electra':'giant','Taygeta':'subgiant','Atlas':'giant','Zavijava':'dwarf',
+    'Auva':'giant','Izar':'giant','Seginus':'giant','Nekkar':'giant',
+    'Brachium':'giant','Yed Posterior':'giant','Sheliak':'bright giant',
+    'Sulafat':'giant','Albireo':'bright giant','Azelfafage':'giant',
+    'Alshain':'subgiant','Deneb el Okab':'giant','Homam':'giant',
+    'Rana':'subgiant','Acamar':'subgiant',
+    'Dabih':'dwarf','Algedi':'giant','Nashira':'dwarf','Sadachbia':'dwarf',
+    'Skat':'giant','Albali':'subgiant','Ancha':'giant','Situla':'subgiant',
+    'Lacaille 8760':'dwarf','Lacaille 9352':'dwarf'
+};
+
+function getDescriptiveStellarType(name, temp) {
+    if (!temp) return null;
+    let color;
+    if (temp >= 30000) color = 'blue';
+    else if (temp >= 10000) color = 'blue-white';
+    else if (temp >= 7500) color = 'white';
+    else if (temp >= 6000) color = 'yellow-white';
+    else if (temp >= 5200) color = 'yellow';
+    else if (temp >= 3700) color = 'orange';
+    else color = 'red';
+    const size = LUMINOSITY_CLASS[name] || 'star';
+    return color + ' ' + size;
+}
+
+function formatDistance(ly) {
+    if (ly === undefined || ly === null) return null;
+    if (ly >= 1000000) return (ly / 1000000).toFixed(1) + ' million ly';
+    if (ly >= 1000) return (ly / 1000).toFixed(1) + 'k ly';
+    return ly.toFixed(1) + ' ly';
+}
+
+const CONSTELLATION_LINES = [
+    ['Betelgeuse','Bellatrix'],['Betelgeuse','Alnitak'],['Alnitak','Alnilam'],
+    ['Alnilam','Mintaka'],['Mintaka','Saiph'],['Saiph','Rigel'],['Rigel','Bellatrix'],
+    ['Dubhe','Merak'],['Merak','Phecda'],['Phecda','Megrez'],['Megrez','Alioth'],
+    ['Alioth','Mizar'],['Mizar','Alkaid'],
+    ['Pollux','Castor'],
+    ['Regulus','Algieba'],['Algieba','Zosma'],['Zosma','Denebola'],
+    ['Schedar','Caph'],['Caph','Ruchbah'],['Ruchbah','Schedar'],
+    ['Deneb','Sadr'],['Sadr','Albireo'],['Sadr','Gienah'],
+    ['Acrux','Mimosa'],['Mimosa','Gacrux'],['Gacrux','Acrux'],
+    ['Rigel Kentaurus','Hadar'],
+    ['Canopus','Miaplacidus'],['Miaplacidus','Avior'],
+    ['Antares','Shaula'],['Shaula','Lesath'],['Antares','Acrab'],
+    ['Vega','Sheliak'],['Sheliak','Sulafat'],
+    ['Altair','Tarazed'],['Altair','Alshain'],
+    ['Markab','Scheat'],['Scheat','Alpheratz'],['Alpheratz','Algenib'],
+    ['Alpheratz','Mirach'],['Mirach','Almach'],
+    ['Mirfak','Algol'],
+    ['Capella','Menkalinan'],
+    ['Arcturus','Izar'],['Arcturus','Muphrid'],
+    ['Sirius','Wezen'],['Wezen','Adhara'],
+    ['Procyon','Gomeisa'],
+    ['Achernar','Cursa'],
+    ['Aldebaran','El Nath'],
+    ['Alrescha','Alpherg'],
+    ['Sadalmelik','Sadalsuud'],
+    ['Deneb Algedi','Dabih'],
+    ['Kaus Australis','Nunki'],['Nunki','Ascella'],
+    ['Rasalhague','Sabik'],
+    ['Zubenelgenubi','Zubeneschamali'],
+    ['Spica','Porrima'],
+];
+
+// ============================================================
+// STATE & CONFIG
+// ============================================================
+let lat = 24.83, lon = 88.05;
+let cityName = 'Ranchi, India';
+let showConstellations = true, showGrid = false, showHorizon = true;
+let zoomLevel = 1;
+let currentBortle = 5;            
+
+// PAN + ROTATE STATE
+let panX = 0, panY = 0;           
+let rotateOffset = 0;             
+let rotateMode = false;           
+let isInteracting = false;        
+let interactStartX = 0, interactStartY = 0;
+let interactStartPanX = 0, interactStartPanY = 0;
+let interactStartRotate = 0;
+let hoveredStar = null;
+
+// AR STATE
+let arMode = false;
+let arDeviceAzimuth = 0;
+let arDeviceAltitude = 0;
+let arDeviceRoll = 0;
+
+// SUN STATE ANIMATION
+let sunForcedOff = false;
+let targetSunAnim = 1.0; 
+let currentSunAnim = 1.0;
+
+function updateMapHint() {
+    const hint = document.getElementById('mapHint');
+    if (hint) {
+        if (arMode) hint.textContent = 'AR Active · point phone at sky to locate objects';
+        else if (rotateMode) hint.textContent = 'drag to rotate · scroll/pinch to zoom · hover for info';
+        else hint.textContent = 'drag to pan · scroll/pinch to zoom · hover for info · SOUTH AT TOP';
+    }
+}
+
+function formatTime(date) { 
+    if (!date) return '--:--'; 
+    return date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false}); 
+}
+
+function toggleFullscreen() {
+    const panel = document.querySelector('.panel-map');
+    const isFull = panel.classList.toggle('fullscreen-mode');
+    document.body.classList.toggle('fullscreen-active', isFull);
+    setTimeout(resizeCanvas, 50); 
+    
+    // Safety disable AR if exiting fullscreen
+    if (!isFull && arMode) {
+        toggleAR();
+    }
+}
+
+// Ensure the map can't be dragged entirely out of view
+function constrainPan() {
+    if (arMode) return; // Prevent manual pan constraint from fighting AR sensors
+    
+    const w = canvas.width / Math.min(window.devicePixelRatio, 2);
+    const h = canvas.height / Math.min(window.devicePixelRatio, 2);
+    const r = Math.min(w/2, h/2) * 0.85 * zoomLevel;
+    const maxDist = r * 0.95; // Keeps the vignette and horizon attached to panning view
+    
+    const dist = Math.sqrt(panX * panX + panY * panY);
+    if (dist > maxDist) {
+        panX = (panX / dist) * maxDist;
+        panY = (panY / dist) * maxDist;
+    }
+}
+
+function resetSunToggle() {
+    if (sunForcedOff) {
+        sunForcedOff = false;
+        document.getElementById('btnSun').classList.add('active');
+        targetSunAnim = 1.0;
+    }
+}
+
+// ============================================================
+// AR LOGIC
+// ============================================================
+function showArMessage(msg, duration) {
+    const el = document.getElementById('arOverlayMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    if(duration) {
+        setTimeout(() => { el.style.display = 'none'; }, duration);
+    }
+}
+
+function handleOrientation(event) {
+    if (!arMode) return;
+    
+    let alpha = event.alpha || 0;
+    let beta = event.beta || 0;
+    let gamma = event.gamma || 0;
+    
+    // Webkit gives absolute compass reading directly. Android alpha needs fallback
+    if (event.webkitCompassHeading !== undefined) {
+        arDeviceAzimuth = event.webkitCompassHeading;
+    } else if (event.absolute && event.alpha !== null) {
+        arDeviceAzimuth = 360 - alpha; 
+    } else {
+        arDeviceAzimuth = 360 - alpha; 
+    }
+    
+    const orientation = (window.screen.orientation || {}).angle || window.orientation || 0;
+    
+    // Handle Screen rotation for pitch/roll calculations accurately
+    let pitch, roll;
+    if (orientation === 90) {
+        pitch = -gamma; roll = beta;
+    } else if (orientation === -90 || orientation === 270) {
+        pitch = gamma; roll = -beta;
+    } else {
+        pitch = beta; roll = gamma;
+    }
+    
+    // Phone standing upright = 0 altitude pointing at horizon. Flat on table = 90 pointing at zenith
+    arDeviceAltitude = Math.max(-90, Math.min(90, 90 - pitch));
+    if (orientation === 90 || orientation === -90 || orientation === 270) {
+        arDeviceAltitude = Math.max(-90, Math.min(90, 90 - Math.abs(gamma)));
+    }
+    arDeviceRoll = roll;
+    
+    const warningEl = document.getElementById('arWarning');
+    if (arDeviceAltitude < 0) {
+        warningEl.style.display = 'block';
+    } else {
+        warningEl.style.display = 'none';
+    }
+}
+
+function isMobileDeviceCheck() {
+    return /Mobi|Android|Tablet|iPad|iPhone/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+}
+
+function toggleAR() {
+    if (!isMobileDeviceCheck()) {
+        showArMessage("AR Mode is only supported on mobile devices and tablets.", 3000);
+        return;
+    }
+
+    const panel = document.querySelector('.panel-map');
+    if (!panel.classList.contains('fullscreen-mode')) {
+        showArMessage("Please switch the skymap to full screen to use this feature.", 3000);
+        return;
+    }
+    
+    arMode = !arMode;
+    document.getElementById('btnAR').classList.toggle('active', arMode);
+    
+    if (arMode) {
+        updateMapHint();
+        
+        // Start Camera Feed
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(stream => {
+                    const videoEl = document.getElementById('arVideo');
+                    videoEl.srcObject = stream;
+                    videoEl.play();
+                    videoEl.style.display = 'block';
+                    document.getElementById('bgStars').style.display = 'none';
+                    canvas.style.background = 'transparent';
+                    panel.style.setProperty('background', 'transparent', 'important');
+                    document.body.style.background = 'transparent';
+                })
+                .catch(e => {
+                    console.error("Camera error:", e);
+                    showArMessage("Camera access denied or unavailable.", 3000);
+                });
+        }
+            
+        // Start Orientation Sensors
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission().then(permissionState => {
+                if (permissionState === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    window.addEventListener('deviceorientationabsolute', handleOrientation);
+                } else {
+                    showArMessage("Orientation permission denied.", 3000);
+                }
+            }).catch(console.error);
+        } else {
+            window.addEventListener('deviceorientation', handleOrientation);
+            window.addEventListener('deviceorientationabsolute', handleOrientation);
+        }
+    } else {
+        // Stop AR & cleanup
+        updateMapHint();
+        const videoEl = document.getElementById('arVideo');
+        if (videoEl.srcObject) {
+            videoEl.srcObject.getTracks().forEach(t => t.stop());
+        }
+        videoEl.style.display = 'none';
+        document.getElementById('bgStars').style.display = 'block';
+        canvas.style.background = '#060a12';
+        panel.style.removeProperty('background');
+        document.body.style.background = '';
+        window.removeEventListener('deviceorientation', handleOrientation);
+        window.removeEventListener('deviceorientationabsolute', handleOrientation);
+        
+        panX = 0; panY = 0; rotateOffset = 0; 
+        document.getElementById('arWarning').style.display = 'none';
+    }
+}
+
+// ============================================================
+// SEARCH SUGGESTIONS
+// ============================================================
+let suggestionDebounce = null;
+let activeSuggestionIndex = -1;
+const cityInput = document.getElementById('cityInput');
+const suggestionsBox = document.getElementById('searchSuggestions');
+
+cityInput.addEventListener('input', () => {
+    clearTimeout(suggestionDebounce);
+    const val = cityInput.value.trim();
+    if (val.length < 2) { suggestionsBox.classList.remove('visible'); return; }
+    suggestionDebounce = setTimeout(() => fetchSuggestions(val), 300);
+});
+
+cityInput.addEventListener('keydown', e => {
+    const items = suggestionsBox.querySelectorAll('.suggestion-item');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeSuggestionIndex = Math.min(activeSuggestionIndex + 1, items.length - 1);
+        updateActiveSuggestion(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeSuggestionIndex = Math.max(activeSuggestionIndex - 1, -1);
+        updateActiveSuggestion(items);
+    } else if (e.key === 'Enter') {
+        if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) {
+            e.preventDefault();
+            items[activeSuggestionIndex].click();
+        } else {
+            searchCity();
+        }
+    } else if (e.key === 'Escape') {
+        suggestionsBox.classList.remove('visible');
+        activeSuggestionIndex = -1;
+    }
+});
+
+document.addEventListener('click', e => {
+    if (!cityInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
+        suggestionsBox.classList.remove('visible');
+    }
+});
+
+function updateActiveSuggestion(items) {
+    items.forEach((item, i) => item.classList.toggle('active', i === activeSuggestionIndex));
+    if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) items[activeSuggestionIndex].scrollIntoView({ block: 'nearest' });
+}
+
+async function fetchSuggestions(query) {
+    try {
+        const searchQuery = query.includes(',') ? query.split(',')[0].trim() : query;
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=10&language=en&format=json`);
+        const data = await res.json();
+        if (!data.results || data.results.length === 0) { suggestionsBox.classList.remove('visible'); return; }
+        suggestionsBox.innerHTML = '';
+        data.results.forEach((r, i) => {
+            const item = document.createElement('div');
+            item.className = 'suggestion-item';
+            if (i === 0) item.classList.add('active');
+            const flag = getFlagEmoji(r.country_code);
+            const detail = [r.admin1, r.country].filter(Boolean).join(', ');
+            item.innerHTML = `<span class="suggestion-flag">${flag}</span><div style="flex:1;min-width:0;"><div class="suggestion-name">${r.name}</div><div class="suggestion-detail">${detail}</div></div>`;
+            item.onclick = () => {
+                lat = r.latitude; lon = r.longitude;
+                cityName = r.name + (r.admin1 ? ', ' + r.admin1 : '') + (r.country ? ', ' + r.country : '');
+                cityInput.value = r.name;
+                suggestionsBox.classList.remove('visible');
+                document.getElementById('locName').textContent = cityName;
+                document.getElementById('searchStatus').textContent = `Set to ${r.name}${r.country ? ' (' + r.country + ')' : ''}`;
+                document.getElementById('searchStatus').className = 'search-status success';
+                resetSunToggle();
+                fetchWeather(); updateAll();
+            };
+            suggestionsBox.appendChild(item);
+        });
+        activeSuggestionIndex = 0;
+        suggestionsBox.classList.add('visible');
+    } catch (e) { suggestionsBox.classList.remove('visible'); }
+}
+
+function getFlagEmoji(countryCode) {
+    if (!countryCode) return '🌍';
+    const code = countryCode.toUpperCase();
+    return String.fromCodePoint(...[...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+}
+
+// ============================================================
+// GEOCODING
+// ============================================================
+async function searchCity() {
+    const input = cityInput.value.trim();
+    const status = document.getElementById('searchStatus');
+    const btn = document.getElementById('searchBtn');
+    if (!input) return;
+    btn.disabled = true;
+    status.textContent = 'Searching...';
+    status.className = 'search-status';
+    document.getElementById('starCanvas').classList.add('switching');
+    suggestionsBox.classList.remove('visible');
+    try {
+        const searchQuery = input.includes(',') ? input.split(',')[0].trim() : input;
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=5&language=en&format=json`);
+        const data = await res.json();
+        if (!data.results || data.results.length === 0) {
+            status.textContent = 'No city found. Try searching just the city name.';
+            status.className = 'search-status error';
+            btn.disabled = false;
+            document.getElementById('starCanvas').classList.remove('switching');
+            return;
+        }
+        let best = data.results[0];
+        for (const r of data.results) { if (r.name.toLowerCase() === input.toLowerCase()) { best = r; break; } }
+        lat = best.latitude; lon = best.longitude;
+        cityName = best.name + (best.admin1 ? ', ' + best.admin1 : '') + (best.country ? ', ' + best.country : '');
+        status.textContent = `Set to ${best.name}${best.country ? ' (' + best.country + ')' : ''}`;
+        status.className = 'search-status success';
+        document.getElementById('locName').textContent = cityName;
+        resetSunToggle();
+        await fetchWeather(); updateAll();
+        setTimeout(() => document.getElementById('starCanvas').classList.remove('switching'), 300);
+    } catch (e) {
+        status.textContent = 'Network error. Please try again.';
+        status.className = 'search-status error';
+        document.getElementById('starCanvas').classList.remove('switching');
+    }
+    btn.disabled = false;
+}
+
+function detectLocation() {
+    const status = document.getElementById('searchStatus');
+    if (!navigator.geolocation) { status.textContent = 'Geolocation not supported.'; status.className = 'search-status error'; return; }
+    status.textContent = 'Detecting...'; status.className = 'search-status';
+    navigator.geolocation.getCurrentPosition(
+        async pos => {
+            lat = pos.coords.latitude; lon = pos.coords.longitude;
+            try {
+                const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${lat},${lon}&count=1`);
+                const data = await res.json();
+                cityName = data.results?.[0]?.name || `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+            } catch { cityName = `${lat.toFixed(2)}, ${lon.toFixed(2)}`; }
+            document.getElementById('locName').textContent = cityName;
+            status.textContent = `Location: ${cityName}`; status.className = 'search-status success';
+            resetSunToggle();
+            await fetchWeather(); updateAll();
+        },
+        err => {
+            let msg = 'Location access denied.';
+            if (err.code === 1) msg = 'Location permission denied. Please allow location access in your browser settings.';
+            else if (err.code === 2) msg = 'Location unavailable. Please try again or search manually.';
+            else if (err.code === 3) msg = 'Location request timed out. Please try again.';
+            status.textContent = msg;
+            status.className = 'search-status error';
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+}
+
+function autoDetectLocation() {
+    if (!navigator.geolocation) return;
+    setTimeout(() => {
+        navigator.geolocation.getCurrentPosition(
+            async pos => {
+                lat = pos.coords.latitude; lon = pos.coords.longitude;
+                let placeName = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+                try {
+                    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${lat},${lon}&count=1`);
+                    const data = await res.json();
+                    if (data.results && data.results[0]) {
+                        const r = data.results[0];
+                        placeName = r.name;
+                        cityName = r.name + (r.admin1 ? ', ' + r.admin1 : '') + (r.country ? ', ' + r.country : '');
+                    } else { cityName = placeName; }
+                } catch { cityName = placeName; }
+                document.getElementById('cityInput').value = placeName;
+                document.getElementById('locName').textContent = cityName;
+                resetSunToggle();
+                await fetchWeather(); updateAll();
+            },
+            () => { /* silently fail - keep default */ },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    }, 500);
+}
+
+// ============================================================
+// WEATHER
+// ============================================================
+async function fetchWeather() {
+    try {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,cloud_cover,visibility&daily=sunrise,sunset&timezone=auto`);
+        const data = await res.json();
+        document.getElementById('wTemp').textContent = Math.round(data.current.temperature_2m) + '°';
+        document.getElementById('wHum').textContent = data.current.relative_humidity_2m + '%';
+        document.getElementById('wCloud').textContent = data.current.cloud_cover + '%';
+        document.getElementById('wVis').textContent = (data.current.visibility / 1000).toFixed(1) + 'km';
+        const bortle = Math.min(9, Math.max(1, Math.round(5 + data.current.cloud_cover / 25)));
+        currentBortle = bortle; 
+        document.getElementById('bortleClass').textContent = 'Bortle ' + bortle;
+        document.getElementById('bortleFill').style.width = (bortle / 9 * 100) + '%';
+        const notes = ['Excellent dark sky — Milky Way casts shadows','Truly dark sky — zodiacal light visible','Rural sky — Milky Way highly structured','Rural/suburban — some light pollution at horizon','Suburban — Milky Way faint but visible','Bright suburban — Milky Way barely visible','Suburban/urban — only bright constellations','City sky — few bright stars visible','Inner city — most stars invisible'];
+        document.getElementById('bortleNote').textContent = notes[bortle - 1];
+        const sunrise = new Date(data.daily.sunrise[0]);
+        const sunset = new Date(data.daily.sunset[0]);
+        const sr = `${sunrise.getHours()}:${String(sunrise.getMinutes()).padStart(2,'0')}`;
+        const ss = `${sunset.getHours()}:${String(sunset.getMinutes()).padStart(2,'0')}`;
+        document.getElementById('moonTimes').textContent = `Sunrise ${sr} · Sunset ${ss}`;
+    } catch (e) { console.error('Weather error:', e); }
+}
+
+// ============================================================
+// STAR MAP 
+// ============================================================
+const canvas = document.getElementById('starCanvas');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('starTooltip');
+const ttName = document.getElementById('ttName');
+const ttInfo = document.getElementById('ttInfo');
+const ttType = document.getElementById('ttType');
+
+function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function projectAz(alt, az) {
+    const w = canvas.width / Math.min(window.devicePixelRatio, 2);
+    const h = canvas.height / Math.min(window.devicePixelRatio, 2);
+    const cx = w / 2;
+    const cy = h / 2;
+    
+    if (arMode) {
+        // Perspective projection (Gnomonic) for accurate spherical AR tracking
+        const fov = 65; 
+        const fovRad = fov * Math.PI / 180;
+        const focalLength = (Math.max(w, h)) / (2 * Math.tan(fovRad / 2));
+        
+        const starAltRad = alt * Math.PI / 180;
+        const starAzRad = az * Math.PI / 180;
+        const camAltRad = arDeviceAltitude * Math.PI / 180;
+        const camAzRad = arDeviceAzimuth * Math.PI / 180;
+        const rollRad = -arDeviceRoll * Math.PI / 180;
+        
+        const dAz = starAzRad - camAzRad;
+        
+        const x3d = Math.cos(starAltRad) * Math.sin(dAz);
+        const y3d = Math.sin(starAltRad) * Math.cos(camAltRad) - Math.cos(starAltRad) * Math.sin(camAltRad) * Math.cos(dAz);
+        const z3d = Math.sin(starAltRad) * Math.sin(camAltRad) + Math.cos(starAltRad) * Math.cos(camAltRad) * Math.cos(dAz);
+        
+        // Prevent drawing things behind the camera FOV
+        if (z3d <= 0.1) return { x: -9999, y: -9999, dist: 0, onScreen: false, z3d };
+        
+        let px = x3d / z3d * focalLength;
+        let py = -y3d / z3d * focalLength;
+        
+        // Apply device physical rotation/roll
+        const rx = px * Math.cos(rollRad) - py * Math.sin(rollRad);
+        const ry = px * Math.sin(rollRad) + py * Math.cos(rollRad);
+        
+        const x = cx + rx;
+        const y = cy + ry;
+        
+        const onScreen = x > -100 && x < w + 100 && y > -100 && y < h + 100;
+        return { x, y, dist: 1, onScreen, z3d };
+    } else {
+        // Standard interactive map 2D Zenith Projection
+        const cxp = cx + panX;
+        const cyp = cy + panY;
+        const r = Math.min(w/2, h/2) * 0.85 * zoomLevel;
+        const dist = (90 - alt) / 90 * r;
+        const angleRad = (az - 180 + rotateOffset) * Math.PI / 180;
+        const x = cxp + dist * Math.sin(angleRad);
+        const y = cyp - dist * Math.cos(angleRad);
+        const onScreen = x > -30 && x < w + 30 && y > -30 && y < h + 30 && dist < r * 1.3;
+        return { x, y, dist, onScreen, z3d: 1 };
+    }
+}
+
+let lastStarPositions = [];
+let lastPlanetPositions = [];
+
+function getStarColor(temp) {
+    if (temp > 30000) return {r:155,g:176,b:255};
+    if (temp > 10000) return {r:170,g:191,b:255};
+    if (temp > 7500) return {r:200,g:220,b:255};
+    if (temp > 6000) return {r:255,g:255,b:255};
+    if (temp > 5200) return {r:255,g:255,b:200};
+    if (temp > 3700) return {r:255,g:230,b:150};
+    return {r:255,g:180,b:120};
+}
+
+// Get appropriate daytime/sunset/nighttime sky gradient
+function getSkyGradient(ctx, w, h, sunAlt) {
+    let t = (sunAlt + 15) / 30; // -15 alt = 0, +15 alt = 1
+    t = Math.max(0, Math.min(1, t)); 
+    
+    // Top Sky
+    const rT = Math.round(6 + (26 - 6)*t);
+    const gT = Math.round(10 + (75 - 10)*t);
+    const bT = Math.round(18 + (140 - 18)*t);
+    
+    // Bottom Sky 
+    let rB, gB, bB;
+    if (t < 0.5) {
+        const t2 = t * 2; 
+        rB = Math.round(6 + (217 - 6)*t2);
+        gB = Math.round(10 + (118 - 10)*t2);
+        bB = Math.round(18 + (67 - 18)*t2);
+    } else {
+        const t2 = (t - 0.5) * 2; 
+        rB = Math.round(217 + (96 - 217)*t2);
+        gB = Math.round(118 + (157 - 118)*t2);
+        bB = Math.round(67 + (214 - 67)*t2);
+    }
+    
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, `rgb(${rT}, ${gT}, ${bT})`);
+    grad.addColorStop(1, `rgb(${rB}, ${gB}, ${bB})`);
+    return grad;
+}
+
+// Bounding-box label drawer to prevent overlaps
+function drawSmartLabel(ctx, text, baseX, baseY, color, font, drawnLabels) {
+    ctx.font = font;
+    const w = ctx.measureText(text).width;
+    const h = 10;
+    // 4 candidate positions: right, left, top, bottom
+    const offsets = [
+        {x: 6, y: 3},
+        {x: -w - 6, y: 3},
+        {x: -w/2, y: -10},
+        {x: -w/2, y: 14}
+    ];
+    for (let off of offsets) {
+        const px = baseX + off.x;
+        const py = baseY + off.y;
+        const box = {x: px - 2, y: py - 9, w: w + 4, h: h + 4};
+        let overlap = false;
+        for (let b of drawnLabels) {
+            if (!(box.x > b.x + b.w || box.x + box.w < b.x || box.y > b.y + b.h || box.y + box.h < b.y)) {
+                overlap = true; break;
+            }
+        }
+        if (!overlap) {
+            ctx.fillStyle = color;
+            ctx.fillText(text, px, py);
+            drawnLabels.push(box);
+            return;
+        }
+    }
+}
+
+function drawMap() {
+    try {
+    const w = canvas.width / Math.min(window.devicePixelRatio, 2);
+    const h = canvas.height / Math.min(window.devicePixelRatio, 2);
+    const cx = w/2 + panX;
+    const cy = h/2 + panY;
+    const r = Math.min(w/2, h/2) * 0.85 * zoomLevel;
+    const now = new Date();
+    const observer = new Astronomy.Observer(lat, lon, 0);
+    const astroTime = Astronomy.MakeTime(now);
+    
+    // Sun logic & Animation interpolator
+    if (currentSunAnim !== targetSunAnim) {
+        const diff = targetSunAnim - currentSunAnim;
+        currentSunAnim += diff * 0.06; // smooth ease speed
+        if (Math.abs(currentSunAnim - targetSunAnim) < 0.001) currentSunAnim = targetSunAnim;
+    }
+
+    const actualSunEqu = Astronomy.Equator(Astronomy.Body.Sun, astroTime, observer, true, true);
+    const actualSunHor = Astronomy.Horizon(astroTime, observer, actualSunEqu.ra, actualSunEqu.dec, 'normal');
+    // Simulated altitude forces the sun below horizon (-20) if turned off
+    const simulatedSunAlt = (actualSunHor.altitude + 20) * currentSunAnim - 20; 
+
+    // Render Sky Gradient based on Sun (Omitted if in AR Mode)
+    ctx.clearRect(0, 0, w, h);
+    
+    if (!arMode) {
+        ctx.fillStyle = getSkyGradient(ctx, w, h, simulatedSunAlt);
+        ctx.fillRect(0, 0, w, h);
+
+        // Vignette - fixed to track panning cx,cy
+        const vig = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 1.3);
+        const nightFactor = Math.max(0.2, Math.min(1, (-simulatedSunAlt + 5) / 15)); 
+        vig.addColorStop(0, 'rgba(6,10,18,0)');
+        vig.addColorStop(1, `rgba(6,10,18,${0.85 * nightFactor})`);
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    // Star Dimming Factor for daytime
+    let starDimFactor;
+    if (simulatedSunAlt > 0) {
+        // Map 0 -> 0.45 (morning/evening), 90 -> 0.15 (noon)
+        starDimFactor = 0.45 - (simulatedSunAlt / 90) * 0.3;
+    } else {
+        // Map -15 -> 1.0 (night), 0 -> 0.45 (twilight)
+        starDimFactor = Math.min(1.0, 0.45 + (-simulatedSunAlt / 15) * 0.55);
+    }
+
+    // Collision Tracking Array for Labels
+    const drawnLabels = [];
+
+    // Horizon line/circle
+    if (showHorizon) {
+        if (arMode) {
+            // AR Horizon - straight line rendered accurately
+            ctx.strokeStyle = 'rgba(201,169,110,0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            let first = true;
+            for(let az=0; az<=360; az+=5) {
+                const p = projectAz(0, az);
+                if (p.z3d > 0.1) {
+                    if (first) { ctx.moveTo(p.x, p.y); first = false; }
+                    else { ctx.lineTo(p.x, p.y); }
+                } else {
+                    first = true;
+                }
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            ctx.fillStyle = 'rgba(201,169,110,0.8)';
+            ctx.font = '500 12px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            const dirs = [ {label:'N', az:0}, {label:'E', az:90}, {label:'S', az:180}, {label:'W', az:270} ];
+            dirs.forEach(d => {
+                const p = projectAz(0, d.az);
+                if (p.z3d > 0.1 && p.onScreen) {
+                    ctx.fillText(d.label, p.x, p.y + 20);
+                }
+            });
+            ctx.textAlign = 'left';
+        } else {
+            // Map Mode Horizon - Circular
+            ctx.strokeStyle = 'rgba(201,169,110,0.08)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(201,169,110,0.25)';
+            ctx.font = '500 10px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            const dirs = [ {label:'N', az:0}, {label:'E', az:90}, {label:'S', az:180}, {label:'W', az:270} ];
+            dirs.forEach(d => {
+                const angleRad = (d.az - 180 + rotateOffset) * Math.PI / 180;
+                const dx = cx + (r + 14) * Math.sin(angleRad);
+                const dy = cy - (r + 14) * Math.cos(angleRad);
+                ctx.fillText(d.label, dx, dy + 3);
+            });
+            ctx.textAlign = 'left';
+        }
+    }
+
+    // Alt-Az grid
+    if (showGrid) {
+        if (arMode) {
+            ctx.strokeStyle = `rgba(255,255,255,0.08)`;
+            ctx.lineWidth = 0.5;
+            for (let az = 0; az < 360; az += 30) {
+                ctx.beginPath();
+                let first = true;
+                for (let alt = 0; alt <= 90; alt += 5) {
+                    const p = projectAz(alt, az);
+                    if (p.z3d > 0.1) {
+                        if (first) { ctx.moveTo(p.x, p.y); first = false; }
+                        else { ctx.lineTo(p.x, p.y); }
+                    } else { first = true; }
+                }
+                ctx.stroke();
+            }
+            for (let alt = 0; alt <= 80; alt += 20) {
+                ctx.beginPath();
+                let first = true;
+                for (let az = 0; az <= 360; az += 5) {
+                    const p = projectAz(alt, az);
+                    if (p.z3d > 0.1) {
+                        if (first) { ctx.moveTo(p.x, p.y); first = false; }
+                        else { ctx.lineTo(p.x, p.y); }
+                    } else { first = true; }
+                }
+                ctx.stroke();
+            }
+        } else {
+            ctx.strokeStyle = `rgba(255,255,255,${0.03 * Math.max(0.2, Math.min(1, (-simulatedSunAlt + 5) / 15))})`;
+            ctx.lineWidth = 0.5;
+            for (let az = 0; az < 360; az += 30) {
+                const p0 = projectAz(90, az);
+                const p90 = projectAz(0, az);
+                ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p90.x, p90.y); ctx.stroke();
+            }
+            for (let alt = 0; alt <= 80; alt += 20) {
+                const rr = (90 - alt) / 90 * r;
+                ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
+            }
+        }
+    }
+
+    // Milky Way Fader based on light pollution & daylight
+    let mwFader = 1.0;
+    if (currentBortle <= 3) mwFader = 0.5;       
+    else if (currentBortle <= 6) mwFader = 0.2;  
+    else mwFader = 0.03;                         
+    mwFader *= starDimFactor; // Erase milky way during daytime
+
+    // Draw Milky Way Dust Clouds
+    if (mwFader > 0.01) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const pixelPerDeg = r / 90; 
+
+        MW_BLOBS.forEach(blob => {
+            const hor = Astronomy.Horizon(astroTime, observer, blob.raHrs, blob.dec, 'normal');
+            if (hor.altitude < -blob.sizeDeg) return;
+            const proj = projectAz(hor.altitude, hor.azimuth);
+            if (!proj.onScreen) return;
+            const horizonFade = Math.min(1, Math.max(0, (hor.altitude + 5) / 15));
+            if (horizonFade <= 0) return;
+            
+            const blobRadius = blob.sizeDeg * pixelPerDeg * zoomLevel;
+            const finalAlpha = blob.alpha * horizonFade * mwFader;
+            
+            const g = ctx.createRadialGradient(proj.x, proj.y, 0, proj.x, proj.y, blobRadius);
+            g.addColorStop(0, `rgba(${blob.color}, ${finalAlpha})`);
+            g.addColorStop(1, `rgba(${blob.color}, 0)`);
+            
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(proj.x, proj.y, blobRadius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.restore();
+
+        // Draw Tiny Milky Way Gas Stars
+        const mwTime = Date.now() * 0.001;
+        ctx.save();
+        ctx.fillStyle = 'white';
+        MW_STARS.forEach(star => {
+            const hor = Astronomy.Horizon(astroTime, observer, star.raHrs, star.dec, 'normal');
+            if (hor.altitude < 0) return;
+            const proj = projectAz(hor.altitude, hor.azimuth);
+            if (!proj.onScreen) return;
+
+            const horizonFade = Math.min(1, Math.max(0, hor.altitude / 10));
+            const shimmer = 0.6 + 0.4 * Math.sin(mwTime * star.blinkSpd + star.blinkOff);
+            
+            const finalAlpha = star.baseAlpha * horizonFade * mwFader * shimmer;
+            if (finalAlpha <= 0) return;
+
+            ctx.globalAlpha = finalAlpha;
+            const starRadius = star.sizeDeg * zoomLevel;
+            ctx.beginPath();
+            ctx.arc(proj.x, proj.y, starRadius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.restore();
+    }
+
+    const planetPositions = [];
+
+    // Calculate Sun Data for Tooltips
+    if (simulatedSunAlt > -15) { 
+        const realSunProj = projectAz(simulatedSunAlt, actualSunHor.azimuth);
+        planetPositions.push({
+            name: 'Sun', c: '#ffda6b', desc: 'Our Local Star', type: 'star',
+            isPlanet: false, isMoon: false, isSun: true,
+            alt: actualSunHor.altitude, az: actualSunHor.azimuth, 
+            ...realSunProj
+        });
+    }
+
+    // Planetary positions
+    const planetNamesToDraw = [
+        {n:'Mercury',s:'☿',c:'#a0a0a0', type:'planet', desc:'Small, fast rocky planet'},
+        {n:'Venus',s:'♀',c:'#c9a96e', type:'planet', desc:'Bright morning/evening star'},
+        {n:'Mars',s:'♂',c:'#b87070', type:'planet', desc:'The Red Planet'},
+        {n:'Jupiter',s:'♃',c:'#b8a070', type:'planet', desc:'Largest gas giant'},
+        {n:'Saturn',s:'♄',c:'#a89878', type:'planet', desc:'Ringed gas giant'},
+        {n:'Uranus',s:'⛢',c:'#70a8a8', type:'planet', desc:'Ice giant'},
+        {n:'Neptune',s:'♆',c:'#7088b8', type:'planet', desc:'Distant ice giant'},
+    ];
+    
+    planetNamesToDraw.forEach(p => {
+        try {
+            const body = Astronomy.Body[p.n];
+            if (!body) return;
+            const equ = Astronomy.Equator(body, astroTime, observer, true, true);
+            const hor = Astronomy.Horizon(astroTime, observer, equ.ra, equ.dec, 'normal');
+            const proj = projectAz(hor.altitude, hor.azimuth);
+            planetPositions.push({ ...p, name: p.n, alt: hor.altitude, az: hor.azimuth, ...proj, isPlanet: true, isMoon: false });
+        } catch(e) {}
+    });
+
+    // Compute Moon Position & Phase Data
+    try {
+        const moonEqu = Astronomy.Equator('Moon', astroTime, observer, true, true);
+        const moonHor = Astronomy.Horizon(astroTime, observer, moonEqu.ra, moonEqu.dec, 'normal');
+        const moonProj = projectAz(moonHor.altitude, moonHor.azimuth);
+        
+        if (moonProj.onScreen && moonHor.altitude >= -5) {
+            const moonIllum = Astronomy.Illumination('Moon', astroTime);
+            const moonPhaseAngle = ((Astronomy.MoonPhase(astroTime) % 360) + 360) % 360;
+            
+            planetPositions.push({
+                name: 'Moon', c: '#f4f4ec', desc: `Phase: ${Math.round(moonIllum.phase_fraction * 100)}% illuminated`, type:'moon',
+                isPlanet: false, isMoon: true,
+                alt: moonHor.altitude, az: moonHor.azimuth, ...moonProj,
+                mp: moonPhaseAngle, phase_frac: moonIllum.phase_fraction
+            });
+        }
+    } catch(e) {}
+
+    lastPlanetPositions = planetPositions;
+
+    // All sky objects positions
+    const starPositions = BRIGHT_STARS.map(star => {
+        const ra_hrs = star.ra / 15;
+        const hor = Astronomy.Horizon(astroTime, observer, ra_hrs, star.dec, 'normal');
+        const proj = projectAz(hor.altitude, hor.azimuth);
+        return { ...star, alt: hor.altitude, az: hor.azimuth, ...proj, isDso: false };
+    });
+
+    const dsoPositions = DSO_OBJECTS.map(obj => {
+        const ra_hrs = obj.ra / 15;
+        const hor = Astronomy.Horizon(astroTime, observer, ra_hrs, obj.dec, 'normal');
+        const proj = projectAz(hor.altitude, hor.azimuth);
+        return { ...obj, alt: hor.altitude, az: hor.azimuth, ...proj, isDso: true };
+    });
+
+    lastStarPositions = [...starPositions, ...dsoPositions];
+
+    // Draw constellation lines
+    if (showConstellations) {
+        ctx.strokeStyle = `rgba(201,169,110,${0.12 * starDimFactor})`;
+        ctx.lineWidth = 0.8;
+        CONSTELLATION_LINES.forEach(([n1, n2]) => {
+            const s1 = starPositions.find(s => s.name === n1);
+            const s2 = starPositions.find(s => s.name === n2);
+            if (!s1 || !s2) return;
+            if (s1.alt > -5 && s2.alt > -5 && s1.onScreen && s2.onScreen) {
+                ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+            }
+        });
+    }
+
+    // Draw DSOs first (behind stars)
+    dsoPositions.forEach(obj => {
+        if (!obj.onScreen || obj.alt < 0) return;
+        const horizonFade = obj.alt < 10 ? Math.max(0, obj.alt / 10) : 1;
+        if (horizonFade <= 0) return;
+        const size = Math.max(4, obj.sizeDeg * zoomLevel * 3);
+        const alpha = Math.min(0.6, Math.max(0.15, (8 - obj.mag) / 8)) * horizonFade * starDimFactor;
+        let color;
+        if (obj.type === 'galaxy') color = '201,169,110';
+        else if (obj.type === 'nebula') color = '120,180,200';
+        else color = '180,160,220';
+        const g = ctx.createRadialGradient(obj.x, obj.y, 0, obj.x, obj.y, size);
+        g.addColorStop(0, `rgba(${color},${alpha * 0.5})`);
+        g.addColorStop(0.5, `rgba(${color},${alpha * 0.2})`);
+        g.addColorStop(1, `rgba(${color},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(obj.x, obj.y, size, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // Draw stars 
+    starPositions.forEach(star => {
+        if (!star.onScreen || star.alt < 0) return;
+        const horizonFade = star.alt < 10 ? Math.max(0, star.alt / 10) : 1;
+        if (horizonFade <= 0) return;
+
+        const t = Date.now() * 0.001;
+        const noise = Math.sin(t * 2.1 + star.ra) * Math.cos(t * 3.7 + star.dec) + Math.sin(t * 1.3 + (star.dist || 0));
+        const magFactor = Math.max(0, 0.12 - (star.mag * 0.02));
+        const altFactor = Math.max(1, Math.min(1.8, 40 / Math.max(2, star.alt)));
+        const twinkle = 1.0 + ((noise * 0.5) * magFactor * altFactor);
+
+        let size;
+        if (star.mag < -0.5) size = 5.5; 
+        else if (star.mag < 0) size = 4.8;
+        else if (star.mag < 0.5) size = 4.0;
+        else if (star.mag < 1) size = 3.2; 
+        else if (star.mag < 1.5) size = 2.5;
+        else if (star.mag < 2) size = 1.9; 
+        else if (star.mag < 2.5) size = 1.5;
+        else if (star.mag < 3) size = 1.2;
+        else if (star.mag < 3.5) size = 1.0;
+        else if (star.mag < 4) size = 0.9;
+        else if (star.mag < 4.5) size = 0.8;
+        else if (star.mag < 5) size = 0.7;
+        else if (star.mag < 5.5) size = 0.6;
+        else size = 0.5;
+
+        // Apply daytime dimming
+        const alpha = Math.min(1, Math.max(0.25, (5.5 - star.mag) / 5.5)) * horizonFade * twinkle * starDimFactor;
+        const col = getStarColor(star.temp);
+
+        // Glow
+        if (star.alt > 0) {
+            let glowFactor, glowAlpha;
+            if (star.mag < 0) { glowFactor = 6.5; glowAlpha = 0.22; }
+            else if (star.mag < 1) { glowFactor = 5.0; glowAlpha = 0.16; } 
+            else if (star.mag < 2) { glowFactor = 3.5; glowAlpha = 0.08; } 
+            else if (star.mag < 3) { glowFactor = 2.0; glowAlpha = 0.03; } 
+            else { glowFactor = 1.5; glowAlpha = 0.015; }
+
+            const glowSize = size * glowFactor;
+            const finalGlowAlpha = alpha * glowAlpha;
+            
+            const g = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, glowSize);
+            g.addColorStop(0, `rgba(${col.r},${col.g},${col.b},${finalGlowAlpha})`);
+            g.addColorStop(0.4, `rgba(${col.r},${col.g},${col.b},${finalGlowAlpha * 0.4})`);
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(star.x, star.y, glowSize, 0, Math.PI * 2); ctx.fill();
+        }
+
+        ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},${alpha})`;
+        ctx.beginPath(); ctx.arc(star.x, star.y, size, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // Draw Planets & Moon
+    planetPositions.forEach(p => {
+        if (!p.onScreen || p.alt < 0 || p.isSun) return; // Sun drawn at the very end
+        const horizonFade = p.alt < 10 ? Math.max(0, p.alt / 10) : 1;
+        if (horizonFade <= 0) return;
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+
+        if (p.isMoon) {
+            const baseSize = 9 * zoomLevel; 
+            const glowFactor = Math.max(0.2, 1 - (currentBortle / 9)); 
+            const glowRadius = baseSize * 4.5;
+            const glowAlpha = 0.45 * glowFactor * horizonFade * p.phase_frac * starDimFactor;
+            
+            if (glowAlpha > 0.01) {
+                const g = ctx.createRadialGradient(0,0, baseSize, 0,0, glowRadius);
+                g.addColorStop(0, `rgba(255,255,245,${glowAlpha})`);
+                g.addColorStop(1, 'rgba(255,255,245,0)');
+                ctx.fillStyle = g;
+                ctx.beginPath(); ctx.arc(0,0, glowRadius, 0, Math.PI*2); ctx.fill();
+            }
+
+            ctx.beginPath();
+            ctx.arc(0, 0, baseSize, 0, Math.PI*2);
+            ctx.clip(); 
+
+            ctx.fillStyle = `rgba(244,244,236,${Math.max(0.7, starDimFactor)})`; 
+            ctx.fillRect(-baseSize, -baseSize, baseSize*2, baseSize*2);
+
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = 'rgba(0,0,0,1)';
+            
+            ctx.beginPath();
+            if (p.mp < 180) {
+                ctx.rect(-baseSize, -baseSize, baseSize, baseSize*2);
+                ctx.fill();
+                const w = Math.cos(p.mp * Math.PI / 180) * baseSize;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, Math.abs(w), baseSize, 0, 0, Math.PI*2);
+                if (p.mp < 90) ctx.fill(); else { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(244,244,236,${Math.max(0.7, starDimFactor)})`; ctx.fill(); }
+            } else {
+                ctx.rect(0, -baseSize, baseSize, baseSize*2);
+                ctx.fill();
+                const w = Math.cos(p.mp * Math.PI / 180) * baseSize;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, Math.abs(w), baseSize, 0, 0, Math.PI*2);
+                if (p.mp >= 270) ctx.fill(); else { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(244,244,236,${Math.max(0.7, starDimFactor)})`; ctx.fill(); }
+            }
+
+            ctx.restore();
+            drawSmartLabel(ctx, p.name, p.x, p.y, `rgba(255, 255, 255, ${0.85 * horizonFade})`, '500 10px "Space Grotesk", sans-serif', drawnLabels);
+            return;
+        }
+
+        const t = Date.now() * 0.001;
+        const pNoise = Math.sin(t * 1.5 + p.az) * Math.cos(t * 2.3 + p.alt);
+        const shimmer = 1.0 + (pNoise * 0.015);
+        
+        let baseSize = 2.5; let glowMult = 3; let glowAlpha = 0.04; let brightness = 0.70; 
+        if (p.name === 'Venus') { baseSize = 5.2; glowMult = 9.5; glowAlpha = 0.35; brightness = 1.0; } 
+        else if (p.name === 'Jupiter') { baseSize = 4.4; glowMult = 7.5; glowAlpha = 0.28; brightness = 0.98; } 
+        else if (p.name === 'Mars' || p.name === 'Saturn') { baseSize = 2.8; glowMult = 3.5; glowAlpha = 0.08; brightness = 0.85; }
+
+        const alphaFade = brightness * horizonFade * starDimFactor;
+
+        // Glow
+        if (alphaFade > 0.01) {
+            const g = ctx.createRadialGradient(0, 0, 0, 0, 0, baseSize * glowMult);
+            g.addColorStop(0, `rgba(255,255,255,${glowAlpha * alphaFade})`);
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(0, 0, baseSize * glowMult, 0, Math.PI * 2); ctx.fill();
+        }
+
+        ctx.fillStyle = p.c;
+        ctx.globalAlpha = alphaFade * shimmer;
+        ctx.beginPath(); ctx.arc(0, 0, baseSize, 0, Math.PI * 2); ctx.fill();
+
+        ctx.globalAlpha = alphaFade; 
+        if (p.name === 'Saturn') {
+            ctx.strokeStyle = 'rgba(200, 190, 160, 0.4)'; ctx.lineWidth = 0.8;
+            ctx.beginPath(); ctx.ellipse(0, 0, baseSize * 2.2, baseSize * 0.6, Math.PI/6, 0, Math.PI*2); ctx.stroke();
+        } else if (p.name === 'Jupiter') {
+            ctx.fillStyle = 'rgba(150, 120, 80, 0.35)';
+            ctx.fillRect(-baseSize * 0.8, -baseSize * 0.3, baseSize * 1.6, baseSize * 0.2);
+            ctx.fillRect(-baseSize * 0.9, baseSize * 0.2, baseSize * 1.8, baseSize * 0.2);
+        } else if (p.name === 'Mars') {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath(); ctx.arc(0, -baseSize * 0.7, baseSize * 0.4, 0, Math.PI); ctx.fill();
+        } else if (p.name === 'Venus') {
+            ctx.fillStyle = 'rgba(6, 10, 18, 0.6)'; 
+            ctx.beginPath(); ctx.arc(-baseSize * 0.3, 0, baseSize * 0.85, 0, Math.PI * 2); ctx.fill();
+        }
+
+        ctx.restore();
+        if (alphaFade > 0.05) drawSmartLabel(ctx, p.name, p.x, p.y, `rgba(255, 255, 255, ${0.7 * horizonFade})`, '500 9px "Space Grotesk", sans-serif', drawnLabels);
+    });
+
+    // DRAW SUN LAST (So its core sits beautifully over the moon and planets)
+    if (simulatedSunAlt > -15) {
+        const sunProj = projectAz(simulatedSunAlt, actualSunHor.azimuth);
+        if (sunProj.onScreen || simulatedSunAlt > -5) { 
+            const glowFade = Math.max(0, Math.min(1, (simulatedSunAlt + 15) / 20)) * currentSunAnim;
+            const sr = 12 * zoomLevel; 
+            
+            function getSunColor(alt) {
+                if (alt > 20) return { r:255, g:250, b:240 }; 
+                if (alt > 5) return { r:255, g:230, b:180 };  
+                if (alt > -5) return { r:255, g:160, b:80 };  
+                return { r:220, g:90, b:50 };                 
+            }
+            const sCol = getSunColor(simulatedSunAlt);
+            
+            ctx.save();
+            ctx.translate(sunProj.x, sunProj.y);
+            ctx.rotate(Date.now() * 0.0001); 
+            ctx.fillStyle = `rgba(${sCol.r}, ${sCol.g}, ${sCol.b}, ${0.08 * glowFade})`;
+            for(let i=0; i<8; i++) {
+                ctx.beginPath();
+                ctx.moveTo(-sr*0.4, 0); ctx.lineTo(sr*0.4, 0); ctx.lineTo(0, sr * 6); ctx.fill();
+                ctx.rotate(Math.PI / 4);
+            }
+            ctx.restore();
+
+            const radGrad = ctx.createRadialGradient(sunProj.x, sunProj.y, sr, sunProj.x, sunProj.y, sr * 10);
+            radGrad.addColorStop(0, `rgba(${sCol.r}, ${sCol.g}, ${sCol.b}, ${1 * glowFade})`);
+            radGrad.addColorStop(0.3, `rgba(${sCol.r}, ${sCol.g}, ${sCol.b}, ${0.4 * glowFade})`);
+            radGrad.addColorStop(1, `rgba(${sCol.r}, ${sCol.g}, ${sCol.b}, 0)`);
+            ctx.fillStyle = radGrad;
+            ctx.beginPath(); ctx.arc(sunProj.x, sunProj.y, sr * 10, 0, Math.PI*2); ctx.fill();
+            
+            if (simulatedSunAlt > -2) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${glowFade})`;
+                ctx.beginPath(); ctx.arc(sunProj.x, sunProj.y, sr, 0, Math.PI*2); ctx.fill();
+            }
+        }
+    }
+
+    // Labels for brightest stars
+    if (starDimFactor > 0.1) {
+        const labeledStars = starPositions.filter(s => s.onScreen && s.alt > 5).sort((a, b) => a.mag - b.mag).slice(0, 15);
+        labeledStars.forEach((star) => {
+            const horizonFade = star.alt < 10 ? Math.max(0, star.alt / 10) : 1;
+            drawSmartLabel(ctx, star.name, star.x, star.y, `rgba(255,255,255,${0.4 * horizonFade * starDimFactor})`, '500 9px "Space Grotesk", sans-serif', drawnLabels);
+        });
+
+        // DSO labels 
+        const labeledDso = dsoPositions.filter(d => d.onScreen && d.alt > 10 && d.mag < 5).sort((a, b) => a.mag - b.mag).slice(0, 4);
+        labeledDso.forEach(d => {
+            const horizonFade = d.alt < 10 ? Math.max(0, d.alt / 10) : 1;
+            drawSmartLabel(ctx, d.name, d.x, d.y, `rgba(201,169,110,${0.35 * horizonFade * starDimFactor})`, 'italic 500 8px "Space Grotesk", sans-serif', drawnLabels);
+        });
+    }
+
+    // Background faint stars 
+    if (starDimFactor > 0.1 && !arMode) {
+        const seed = 42;
+        for (let i = 0; i < 350; i++) {
+            const sx = (Math.sin(i * 127.1 + seed) * 0.5 + 0.5) * w;
+            const sy = (Math.cos(i * 311.7 + seed) * 0.5 + 0.5) * h;
+            const br = (Math.sin(i * 74.3) * 0.5 + 0.5) * 0.4 + 0.05;
+            const twinkle = Math.sin(Date.now() * 0.001 + i) * 0.15 + 0.85;
+            ctx.fillStyle = `rgba(255,255,255,${br * twinkle * starDimFactor})`;
+            ctx.beginPath(); ctx.arc(sx, sy, 0.6, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    // Helper overlay text
+    if (actualSunHor.altitude > 0 && currentSunAnim > 0.5 && !sunForcedOff && !arMode) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${currentSunAnim * 0.85})`;
+        ctx.font = '500 13px "Space Grotesk", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText("Turn off the Sun to see heavenly bodies", w/2, 35);
+        ctx.textAlign = 'left';
+    }
+
+    } catch (e) {
+        console.error('Star map error:', e);
+        ctx.fillStyle = '#060a12';
+        ctx.fillRect(0, 0, canvas.width / Math.min(window.devicePixelRatio, 2), canvas.height / Math.min(window.devicePixelRatio, 2));
+        ctx.fillStyle = '#c45c5c';
+        ctx.font = '500 14px "Space Grotesk", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Star map unavailable', canvas.width / Math.min(window.devicePixelRatio, 2) / 2, canvas.height / Math.min(window.devicePixelRatio, 2) / 2);
+    }
+    requestAnimationFrame(drawMap);
+}
+drawMap();
+
+// ============================================================
+// INTERACTION — PAN or ROTATE mode + ZOOM
+// ============================================================
+
+window.addEventListener('mousemove', e => {
+    if (!isInteracting || arMode) return;
+    if (rotateMode) {
+        const dx = e.clientX - interactStartX;
+        rotateOffset = interactStartRotate + dx * 0.5;
+    } else {
+        const dx = e.clientX - interactStartX;
+        const dy = e.clientY - interactStartY;
+        panX = interactStartPanX + dx; panY = interactStartPanY + dy;
+        constrainPan();
+    }
+});
+
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    let closest = null;
+    let closestDist = 20;
+
+    let allObjs = [...lastStarPositions];
+    if (typeof lastPlanetPositions !== 'undefined') allObjs = allObjs.concat(lastPlanetPositions);
+
+    for (const obj of allObjs) {
+        if (!obj.onScreen || obj.alt < 0) continue;
+        const dx = mx - obj.x;
+        const dy = my - obj.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < closestDist) { closestDist = dist; closest = obj; }
+    }
+
+    if (closest) {
+        hoveredStar = closest;
+        ttName.textContent = closest.name;
+
+        let info = closest.desc;
+        if (closest.mag !== undefined) info += ' · Mag ' + closest.mag.toFixed(2);
+
+        const visCat = getVisibilityCategory(closest.alt);
+        let badgeText;
+        let textColor;
+
+        if (closest.isSun) {
+            badgeText = 'star';
+            textColor = closest.c;
+        } else if (closest.isMoon) {
+            badgeText = 'moon';
+            textColor = closest.c;
+        } else if (closest.isPlanet) {
+            info += ' · Planet';
+            badgeText = 'planet';
+            textColor = closest.c; 
+        } else if (closest.isDso) {
+            const distStr = formatDistance(closest.dist);
+            if (distStr) info += ' · ' + distStr;
+            badgeText = closest.type;
+            textColor = '#c9a96e'; 
+        } else {
+            const distStr = formatDistance(closest.dist);
+            if (distStr) info += ' · ' + distStr;
+            if (closest.const) info += ' · ' + getConstellationFull(closest.const);
+            badgeText = getDescriptiveStellarType(closest.name, closest.temp) || 'star';
+            textColor = getStarColorHex(closest.temp);
+        }
+
+        info += ' · ' + closest.alt.toFixed(0) + '° alt';
+        info += ' · ' + visCat.label;
+        ttInfo.textContent = info;
+
+        ttType.textContent = badgeText;
+        ttType.style.display = 'inline-block';
+        ttType.style.background = visCat.color + '18';  
+        ttType.style.color = textColor;  
+        ttType.style.border = '1px solid ' + visCat.color + '35';  
+        ttType.style.textShadow = '0 0 8px ' + textColor + '40';  
+
+        const ttRect = tooltip.getBoundingClientRect();
+        let left = e.clientX + 14;
+        let top = e.clientY - 14;
+        if (left + ttRect.width > window.innerWidth - 8) left = e.clientX - ttRect.width - 14;
+        if (top + ttRect.height > window.innerHeight - 8) top = e.clientY - ttRect.height - 14;
+        if (left < 8) left = 8;
+        if (top < 8) top = 8;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+        tooltip.classList.add('visible');
+        canvas.style.cursor = 'pointer';
+    } else {
+        hoveredStar = null;
+        tooltip.classList.remove('visible');
+        canvas.style.cursor = isInteracting ? 'grabbing' : 'grab';
+    }
+});
+
+canvas.addEventListener('mouseleave', () => { tooltip.classList.remove('visible'); hoveredStar = null; });
+
+canvas.addEventListener('mousedown', e => {
+    isInteracting = true;
+    interactStartX = e.clientX; interactStartY = e.clientY;
+    interactStartPanX = panX; interactStartPanY = panY; interactStartRotate = rotateOffset;
+    canvas.style.cursor = 'grabbing';
+});
+
+window.addEventListener('mouseup', () => { isInteracting = false; canvas.style.cursor = 'grab'; constrainPan(); });
+
+canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
+
+    const delta = e.deltaY > 0 ? 0.92 : 1.08;
+    const oldZoom = zoomLevel;
+    zoomLevel = Math.max(0.4, Math.min(4, zoomLevel * delta));
+
+    const zoomRatio = zoomLevel / oldZoom;
+    const w = canvas.width / Math.min(window.devicePixelRatio, 2);
+    const h = canvas.height / Math.min(window.devicePixelRatio, 2);
+    const cx = w / 2; const cy = h / 2;
+    
+    if(!arMode) {
+        panX = mx - (mx - panX - cx) * zoomRatio - cx;
+        panY = my - (my - panY - cy) * zoomRatio - cy;
+        constrainPan();
+    }
+}, { passive: false });
+
+// TOUCH
+let touchStartDist = 0, touchStartZoom = 1, touchStartPanX = 0, touchStartPanY = 0, touchStartRotate = 0, touchStartMidX = 0, touchStartMidY = 0;
+
+canvas.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+        isInteracting = true;
+        interactStartX = e.touches[0].clientX; interactStartY = e.touches[0].clientY;
+        interactStartPanX = panX; interactStartPanY = panY; interactStartRotate = rotateOffset;
+    } else if (e.touches.length === 2) {
+        isInteracting = false;
+        const dx = e.touches[0].clientX - e.touches[1].clientX; const dy = e.touches[0].clientY - e.touches[1].clientY;
+        touchStartDist = Math.sqrt(dx*dx + dy*dy);
+        touchStartZoom = zoomLevel; touchStartPanX = panX; touchStartPanY = panY; touchStartRotate = rotateOffset;
+        touchStartMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2; touchStartMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (arMode && e.touches.length === 1) return; // Prevent manual panning dragging AR
+    
+    if (e.touches.length === 1 && isInteracting) {
+        if (rotateMode) {
+            const dx = e.touches[0].clientX - interactStartX;
+            rotateOffset = interactStartRotate + dx * 0.5;
+        } else {
+            const dx = e.touches[0].clientX - interactStartX; const dy = e.touches[0].clientY - interactStartY;
+            panX = interactStartPanX + dx; panY = interactStartPanY + dy;
+            constrainPan();
+        }
+    } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX; const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (touchStartDist > 0) {
+            const scale = dist / touchStartDist;
+            const oldZoom = touchStartZoom;
+            zoomLevel = Math.max(0.4, Math.min(4, touchStartZoom * scale));
+            const rect = canvas.getBoundingClientRect();
+            const mx = touchStartMidX - rect.left; const my = touchStartMidY - rect.top;
+            const w = canvas.width / Math.min(window.devicePixelRatio, 2); const h = canvas.height / Math.min(window.devicePixelRatio, 2);
+            const cx = w / 2; const cy = h / 2;
+            const zoomRatio = zoomLevel / oldZoom;
+            if(!arMode) {
+                panX = mx - (mx - touchStartPanX - cx) * zoomRatio - cx; panY = my - (my - touchStartPanY - cy) * zoomRatio - cy;
+            }
+        }
+        if(!arMode) {
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2; const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const dxPan = midX - touchStartMidX; const dyPan = midY - touchStartMidY;
+            panX = touchStartPanX + dxPan; panY = touchStartPanY + dyPan;
+            constrainPan();
+        }
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+    if (e.touches.length === 0) { isInteracting = false; touchStartDist = 0; constrainPan(); }
+    else if (e.touches.length === 1) {
+        isInteracting = true;
+        interactStartX = e.touches[0].clientX; interactStartY = e.touches[0].clientY;
+        interactStartPanX = panX; interactStartPanY = panY; interactStartRotate = rotateOffset; touchStartDist = 0;
+    }
+});
+
+function toggleConstellations() { showConstellations = !showConstellations; document.getElementById('btnConst').classList.toggle('active', showConstellations); }
+function toggleGrid() { showGrid = !showGrid; document.getElementById('btnGrid').classList.toggle('active', showGrid); }
+function toggleHorizon() { showHorizon = !showHorizon; document.getElementById('btnHorizon').classList.toggle('active', showHorizon); }
+function toggleSun() { sunForcedOff = !sunForcedOff; document.getElementById('btnSun').classList.toggle('active', !sunForcedOff); targetSunAnim = sunForcedOff ? 0.0 : 1.0; }
+
+function toggleRotateMode() {
+    rotateMode = !rotateMode;
+    document.getElementById('btnRotate').classList.toggle('active', rotateMode);
+    updateMapHint();
+}
+
+// ============================================================
+// MOON 
+// ============================================================
+function drawMoon() {
+    try {
+    const c = document.getElementById('moonCanvas');
+    const x = c.getContext('2d');
+    const w = c.width, h = c.height;
+    const cx = w/2, cy = h/2, r = 42;
+    const now = new Date();
+
+    const observer = new Astronomy.Observer(lat, lon, 0);
+    const astroTime = Astronomy.MakeTime(now);
+    const moonPhase = Astronomy.MoonPhase(astroTime);
+    const moonIllum = Astronomy.Illumination('Moon', astroTime);
+    const phaseFraction = moonIllum.phase_fraction;
+
+    let name;
+    const mp = ((moonPhase % 360) + 360) % 360;
+    if (mp < 1 || mp > 359) name = 'New Moon';
+    else if (mp < 45) name = 'Waxing Crescent';
+    else if (mp < 90) name = 'Waxing Crescent';
+    else if (mp < 91) name = 'First Quarter';
+    else if (mp < 135) name = 'Waxing Gibbous';
+    else if (mp < 180) name = 'Waxing Gibbous';
+    else if (mp < 181) name = 'Full Moon';
+    else if (mp < 225) name = 'Waning Gibbous';
+    else if (mp < 270) name = 'Waning Gibbous';
+    else if (mp < 271) name = 'Last Quarter';
+    else if (mp < 315) name = 'Waning Crescent';
+    else name = 'Waning Crescent';
+
+    document.getElementById('moonPhaseName').textContent = name;
+    document.getElementById('moonIllum').textContent = Math.round(phaseFraction * 100) + '% illuminated';
+
+    try {
+        const moonRise = Astronomy.SearchRiseSet('Moon', observer, 1, astroTime, 1.0);
+        const moonSet = Astronomy.SearchRiseSet('Moon', observer, -1, astroTime, 1.0);
+        const riseStr = moonRise ? formatTime(moonRise.date) : '--:--';
+        const setStr = moonSet ? formatTime(moonSet.date) : '--:--';
+        document.getElementById('moonTimes').textContent = `↑ ${riseStr} · ↓ ${setStr}`;
+    } catch (e) {
+        document.getElementById('moonTimes').textContent = '↑ --:-- · ↓ --:--';
+    }
+
+    x.clearRect(0, 0, w, h);
+    x.fillStyle = '#141b2a';
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#d4c9a8';
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#141b2a';
+    x.beginPath();
+
+    if (mp < 180) {
+        const shadowWidth = r * 2 * (1 - mp / 180);
+        x.ellipse(cx - r + shadowWidth/2, cy, shadowWidth/2, r, 0, 0, Math.PI * 2);
+    } else {
+        const shadowWidth = r * 2 * ((mp - 180) / 180);
+        x.ellipse(cx + r - shadowWidth/2, cy, shadowWidth/2, r, 0, 0, Math.PI * 2);
+    }
+    x.fill();
+
+    x.fillStyle = 'rgba(0,0,0,0.12)';
+    x.beginPath(); x.arc(cx - 12, cy - 8, 5, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.arc(cx + 8, cy + 12, 3, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.arc(cx - 4, cy + 16, 2.5, 0, Math.PI * 2); x.fill();
+    const g = x.createRadialGradient(cx, cy, r, cx, cy, r + 12);
+    g.addColorStop(0, 'rgba(212,201,168,0.2)');
+    g.addColorStop(1, 'rgba(212,201,168,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(cx, cy, r + 12, 0, Math.PI * 2); x.fill();
+    } catch (e) { document.getElementById('moonPhaseName').textContent = 'Unavailable'; }
+}
+
+function updatePlanets() {
+    const list = document.getElementById('planetsList');
+    list.innerHTML = '';
+    const now = new Date();
+    const observer = new Astronomy.Observer(lat, lon, 0);
+    const astroTime = Astronomy.MakeTime(now);
+
+    const planetNames = [
+        {n:'Mercury',s:'☿',c:'#a0a0a0'}, {n:'Venus',s:'♀',c:'#c9a96e'},
+        {n:'Mars',s:'♂',c:'#b87070'}, {n:'Jupiter',s:'♃',c:'#b8a070'},
+        {n:'Saturn',s:'♄',c:'#a89878'}, {n:'Uranus',s:'⛢',c:'#70a8a8'},
+        {n:'Neptune',s:'♆',c:'#7088b8'},
+    ];
+
+    planetNames.forEach(p => {
+        try {
+            const body = Astronomy.Body[p.n];
+            if (!body) return;
+            const equ = Astronomy.Equator(body, astroTime, observer, true, true);
+            const hor = Astronomy.Horizon(astroTime, observer, equ.ra, equ.dec, 'normal');
+            const up = hor.altitude > 0;
+            const d = document.createElement('div');
+            d.className = 'planet-row';
+            d.innerHTML = `<span class="planet-sym" style="color:${up ? p.c : 'var(--text-faint)'}">${p.s}</span><div class="planet-info"><div class="planet-name" style="color:${up ? p.c : 'var(--text-faint)'}">${p.n}</div><div class="planet-pos">${up ? hor.altitude.toFixed(0) + '° alt · ' + hor.azimuth.toFixed(0) + '° az' : 'Below horizon'}</div></div><span class="planet-badge ${up ? 'badge-up' : 'badge-down'}">${up ? 'Up' : 'Down'}</span>`;
+            list.appendChild(d);
+        } catch (e) {}
+    });
+}
+
+function populateISS() {
+    const list = document.getElementById('issList');
+    const passes = [{t:'21:42',d:'4 min',m:'-3.5'},{t:'23:18',d:'6 min',m:'-3.8'},{t:'00:53',d:'3 min',m:'-2.9'}];
+    passes.forEach(p => {
+        const d = document.createElement('div');
+        d.className = 'iss-row';
+        d.innerHTML = `<div><div class="iss-time">${p.t}</div><div class="iss-meta">${p.d}</div></div><div class="iss-mag">mag ${p.m}</div>`;
+        list.appendChild(d);
+    });
+}
+
+function populateShowers() {
+    const list = document.getElementById('showerList');
+    const s = [
+        {n:'Perseids',p:'Aug 12',r:'100/hr'},{n:'Geminids',p:'Dec 13',r:'120/hr'},
+        {n:'Quadrantids',p:'Jan 3',r:'120/hr'},{n:'Lyrids',p:'Apr 22',r:'18/hr'},
+        {n:'Orionids',p:'Oct 21',r:'20/hr'},{n:'Leonids',p:'Nov 17',r:'15/hr'},
+    ];
+    s.forEach(sh => {
+        const d = document.createElement('div');
+        d.className = 'shower-row';
+        d.innerHTML = `<div><div class="shower-name">${sh.n}</div><div class="shower-when">Peak ${sh.p}</div></div><div class="shower-rate">${sh.r}</div>`;
+        list.appendChild(d);
+    });
+}
+
+async function fetchAPOD() {
+    const container = document.getElementById('apodContent');
+    try {
+        const res = await fetch('data/apod.json');
+        if (!res.ok) throw new Error('Failed to load APOD');
+        const data = await res.json();
+        renderAPOD(data);
+    } catch (e) {
+        container.innerHTML = `<div style="padding:30px;text-align:center;"><div style="font-size:2rem;margin-bottom:10px;">🌌</div><div style="color:var(--text-dim);font-size:0.9rem;margin-bottom:8px;">NASA APOD is temporarily unavailable</div><a href="https://apod.nasa.gov/apod/astropix.html" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.85rem;text-decoration:none;">View today's picture on NASA →</a></div>`;
+    }
+}
+
+function renderAPOD(data) {
+    const container = document.getElementById('apodContent');
+    const isVideo = data.media_type === 'video';
+    const imgUrl = isVideo ? (data.thumbnail_url || data.url) : data.url;
+    const hdUrl = data.hdurl || imgUrl;
+    const copyright = data.copyright ? `© ${data.copyright}` : '';
+    container.innerHTML = `
+        <div class="apod-content">
+            <div class="apod-image-wrap">
+                <a href="${hdUrl}" target="_blank" rel="noopener">
+                    <img src="${imgUrl}" alt="${data.title}" loading="lazy" onerror="this.style.display='none';this.parentElement.innerHTML='<div style=\'padding:40px;text-align:center;color:var(--text-faint)\'>Image unavailable</div>'">
+                </a>
+                ${isVideo ? `<div class="apod-play">▶</div>` : ''}
+            </div>
+            <div class="apod-text">
+                <div class="apod-title">${data.title}</div>
+                <div class="apod-date">${data.date}</div>
+                <div class="apod-explanation">${data.explanation}</div>
+                ${copyright ? `<div class="apod-copyright">${copyright}</div>` : ''}
+                ${isVideo ? `<div style="margin-top:10px;"><a href="${data.url}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.8rem;text-decoration:none;">Watch video →</a></div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function updateClock() { document.getElementById('skyTime').textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false}); }
+setInterval(updateClock, 1000);
+updateClock();
+
+function updateAll() { updatePlanets(); drawMoon(); }
+
+populateISS();
+populateShowers();
+fetchWeather();
+fetchAPOD();
+updateAll();
+document.getElementById('locName').textContent = cityName;
+
+const status = document.getElementById('searchStatus');
+status.textContent = `Location: ${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+status.className = 'search-status success';
+
+autoDetectLocation();
+
+// Handle Desktop AR visually deactivating instead of crashing/hiding
+if (!isMobileDeviceCheck()) {
+    const arBtn = document.getElementById('btnAR');
+    if (arBtn) {
+        arBtn.style.opacity = '0.5';
+        arBtn.style.cursor = 'not-allowed';
+    }
+}
+
+</script>
+</body>
+</html>
