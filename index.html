@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<!-- Enhanced Viewport & Status Bar Overlay -->
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="#05060a" name="theme-color"/>
+<meta content="yes" name="apple-mobile-web-app-capable"/>
+<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
+<meta content="StarSight" name="apple-mobile-web-app-title"/>
+<!-- SEO -->
+<meta content="A precise telescope navigation and astronomy companion." name="description"/>
+<!-- Open Graph -->
+<meta content="StarSight" property="og:title"/>
+<meta content="A precise telescope navigation and astronomy companion." property="og:description"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=28" property="og:image"/>
+<meta content="https://riasatahamed.github.io/starsight/" property="og:url"/>
+<meta content="website" property="og:type"/>
+<!-- Twitter / X -->
+<meta content="summary_large_image" name="twitter:card"/>
+<meta content="StarSight" name="twitter:title"/>
+<meta content="A precise telescope navigation and astronomy companion." name="twitter:description"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=28" name="twitter:image"/>
+<!-- Favicon -->
+<link href="images/StarSight_Logo.png?v=28" rel="icon" type="image/png"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+<!-- LINK TO YOUR NEW CSS FILE -->
+<link href="style.css?v=28" rel="stylesheet"/>
+<!-- PWA & Mobile Meta -->
+<link href="manifest.json?v=28" rel="manifest"/>
+<meta content="#05060a" name="theme-color"/>
+<meta content="yes" name="apple-mobile-web-app-capable"/>
+<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
+<meta content="StarSight" name="apple-mobile-web-app-title"/>
+<link href="images/StarSight_Logo.png?v=28" rel="apple-touch-icon"/>
+</head>
+<body>
+<div class="fixed-bg"></div>
+<video autoplay="" id="arVideo" playsinline="" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:99998;"></video>
+<!-- Refined AR Interface Overlay -->
+<div id="arUIOverlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100dvh; z-index:100000; pointer-events:none; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<div id="arTopHud">
+  <div id="arTimeBlock">
+    <div id="arUiTime">UTC --:--</div>
+    <div id="arUiDate">--</div>
+  </div>
+  <button id="arExitButton" type="button" onclick="exitAR()" aria-label="Exit AR view" title="Exit AR view">
+    <svg fill="none" height="22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" viewbox="0 0 24 24" width="22"><path d="M15 18l-6-6 6-6"></path></svg>
+    <span>Back</span>
+  </button>
+</div>
+<div id="arTimelapseWarning" style="display:none; position:absolute; bottom:95px; left:50%; transform:translateX(-50%); background:rgba(255, 75, 75, 0.25); backdrop-filter:blur(8px); border:1px solid rgba(255, 75, 75, 0.4); color:#ffb3b3; font-size:0.8rem; padding:8px 16px; border-radius:20px; z-index:1000000; white-space:nowrap; pointer-events:none; font-weight: 500;">Turn off the timelapse first</div>
+<div id="arBottomBtns" style="position:absolute; bottom:40px; left:50%; transform:translateX(-50%); display:flex; gap:16px; pointer-events:auto; z-index:1000000;">
+<div id="btnCameraOn" onclick="turnCameraOn()" style="padding:14px 28px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3); color:white; border-radius:30px; font-weight:600; cursor:pointer; backdrop-filter:blur(12px); white-space:nowrap; transition:all 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">Turn Camera On</div>
+<div id="btnRecenter" onclick="recenterAR()" style="display:none; padding:14px 28px; background:var(--gradient-primary); border:none; color:white; border-radius:30px; font-weight:600; cursor:pointer; backdrop-filter:blur(12px); white-space:nowrap; transition:all 0.2s; box-shadow: 0 4px 15px rgba(255, 0, 122, 0.4);">Follow Device</div>
+</div>
+</div>
+<div id="arOverlayMsg" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10, 10, 15, 0.8); backdrop-filter:blur(20px); color:white; padding:20px 30px; border-radius:20px; border:1px solid rgba(255,255,255,0.2); z-index:1000000; text-align:center; font-weight:500; box-shadow:0 20px 40px rgba(0,0,0,0.5);"></div>
+<div id="arWarning" style="display:none; position:fixed; bottom:150px; left:50%; transform:translateX(-50%); background:var(--danger); color:#fff; padding:14px 28px; border-radius:30px; z-index:1000000; font-weight:600; box-shadow:0 8px 32px rgba(255, 75, 75, 0.4);">Please point the camera towards the sky</div>
+<div class="bg-stars" id="bgStars"></div>
+<div class="star-tooltip" id="starTooltip">
+<div class="tt-name" id="ttName"></div>
+<div class="tt-info" id="ttInfo"></div>
+<div class="tt-type" id="ttType"></div>
+</div>
+<!-- Cosmic Journey: immersive long-press exploration transition -->
+<div aria-hidden="true" class="cosmic-journey" id="cosmicJourney">
+<canvas id="journeyCanvas"></canvas>
+<div class="journey-vignette"></div>
+<button aria-label="Return to sky" class="journey-exit" id="journeyExit" type="button">← Return to sky</button>
+<div class="journey-hud">
+<div class="journey-kicker">COSMIC JOURNEY</div>
+<div class="journey-target" id="journeyTarget">—</div>
+<div class="journey-distance" id="journeyDistance">—</div>
+<div class="journey-status" id="journeyStatus">Preparing astronomical scale transition</div>
+<div class="journey-scale" id="journeyScale"></div>
+</div>
+<div class="journey-arrival" id="journeyArrival">
+<div class="arrival-kicker">ARRIVED</div>
+<div class="arrival-name" id="arrivalName">—</div>
+<div class="arrival-meta" id="arrivalMeta">—</div>
+<div class="arrival-rule"></div>
+<div class="arrival-fact" id="arrivalFact">Exploring this object at astronomical scale.</div>
+<button class="arrival-return" id="arrivalReturn" type="button">Return to sky</button>
+</div>
+</div>
+
+<header class="cinema-topbar" id="cinemaTopbar">
+<div aria-label="StarSight home" class="brand-lockup" data-page-target="sky" role="button" tabindex="0">
+<div class="brand-mark"><span></span><span></span><span></span></div>
+<div><div class="brand-name">Star<span>Sight</span></div><div class="brand-sub">PRECISION PLANETARIUM</div></div>
+</div>
+<nav aria-label="Primary navigation" class="main-nav" id="mainNav">
+<button class="nav-item active" data-page-target="sky">Sky</button>
+<button class="nav-item" data-page-target="explore">Explore</button>
+<button class="nav-item" data-page-target="conditions">Conditions</button>
+<button class="nav-item" data-page-target="live">Live</button>
+<button class="nav-item" data-page-target="journal">Journal</button>
+<button class="nav-item" data-page-target="apod">APOD</button>
+<button class="nav-item" data-page-target="advanced">Advanced</button>
+<button class="nav-item" data-page-target="about">Science</button></nav>
+<div class="topbar-actions">
+<button aria-label="Open menu" class="top-icon menu-toggle" id="menuToggle" title="Open menu">☰</button>
+</div>
+</header>
+<div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+
+<div class="search-wrap location-drawer" id="locationDrawer"><button aria-label="Close location search" class="drawer-close" id="locationClose">×</button>
+<div class="search-box">
+<input autocomplete="off" id="cityInput" placeholder="Search city... e.g. Kolkata, Hyderabad, Ranchi" type="text" value=""/>
+<button class="locate-btn" onclick="detectLocation()" title="Use my location">📍</button>
+<button class="search-btn" id="searchBtn" onclick="searchCity()">Search</button>
+<div class="search-suggestions" id="searchSuggestions"></div>
+</div>
+<div class="search-status" id="searchStatus"></div>
+</div>
+<div class="dashboard app-pages" id="appPages"><section aria-hidden="false" class="app-page page-sky active" data-page="sky"><div class="panel panel-map">
+<div class="sky-cinema-intro" id="skyCinemaIntro">
+<div class="cinema-location" id="cinemaLocation">--</div>
+<div class="cinema-title">LOOK UP.</div>
+<div class="cinema-subtitle">The sky above you, rendered in real time.</div>
+</div>
+<div class="sky-minimal-hud"><span class="hud-time" id="hudSkyTime">UTC --:--</span></div>
+
+<div class="panel-header">
+<span class="panel-title map-title-cinematic">LIVE SKY</span>
+
+</div>
+<div class="canvas-wrapper">
+<button class="floating-btn left active" id="btnSunMap" onclick="toggleSun()" title="Toggle simulated daytime visibility">
+<svg fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="20"><circle cx="12" cy="12" r="5"></circle><line x1="12" x2="12" y1="1" y2="3"></line><line x1="12" x2="12" y1="21" y2="23"></line><line x1="4.22" x2="5.64" y1="4.22" y2="5.64"></line><line x1="18.36" x2="19.78" y1="18.36" y2="19.78"></line><line x1="1" x2="3" y1="12" y2="12"></line><line x1="21" x2="23" y1="12" y2="12"></line><line x1="4.22" x2="5.64" y1="19.78" y2="18.36"></line><line x1="18.36" x2="19.78" y1="5.64" y2="4.22"></line></svg>
+<span>SUN</span>
+</button>
+<button class="floating-btn render-mode-btn active" id="btnRenderMode" onclick="toggleRenderMode()" title="Toggle photorealistic / scientific rendering">
+<span id="renderModeIcon">✦</span><span id="renderModeText">PHOTO</span>
+</button>
+<button class="floating-btn right" id="btnARMap" onclick="toggleAR()" title="Launch AR Planetarium">
+<svg fill="none" height="22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="22">
+<path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+<circle cx="12" cy="12" r="3"></circle>
+</svg>
+<span>AR</span>
+</button>
+<!-- NEW COMPASS UI -->
+<div class="sky-compass" id="skyCompass">
+<div class="compass-dial"></div>
+<div class="compass-labels">
+<span class="n">N</span><span class="e">E</span><span class="s">S</span><span class="w">W</span>
+</div>
+<div class="compass-needle-wrap" id="compassNeedle">
+<div class="compass-needle">
+<div class="needle-north"></div>
+<div class="needle-south"></div>
+</div>
+</div>
+<div class="compass-center"></div>
+</div>
+<div class="sky-tool-dock" id="skyToolDock" aria-label="Sky tools"><button class="sky-tool-icon" data-tool="constellations" onclick="toggleConstellations()" title="Constellations" aria-label="Constellations"><span>☆</span></button><button class="sky-tool-icon" data-tool="grid" onclick="toggleGrid()" title="Coordinate grid" aria-label="Coordinate grid"><span>⊞</span></button><button class="sky-tool-icon" data-tool="horizon" onclick="toggleHorizon()" title="Horizon" aria-label="Horizon"><span>⌒</span></button><button class="sky-tool-icon" data-tool="rotate" onclick="toggleRotateMode()" title="Rotate mode" aria-label="Rotate mode"><span>⟳</span></button><button class="sky-tool-icon" data-tool="photo" onclick="toggleRenderMode()" title="Photorealistic rendering" aria-label="Photorealistic rendering"><span>✦</span></button><button class="sky-tool-icon" data-tool="sun" onclick="toggleSun()" title="Daylight simulation" aria-label="Daylight simulation"><span>☼</span></button><button class="sky-tool-icon" data-tool="night" id="btnNightModeHome" onclick="toggleNightMode()" title="Night vision" aria-label="Night vision"><span>☾</span></button></div>
+<canvas id="starCanvas"></canvas>
+<div class="timelapse-label" id="timelapseLabel">⏩ TIMELAPSE — --</div>
+<div class="timelapse-block-msg" id="timelapseBlockMsg">Turn off timelapse first</div>
+</div>
+<div class="sky-location-orb" id="skyLocationOrb"><button class="sky-location-icon" id="locationOpen" aria-label="Change observing location" title="Change observing location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"></path><circle cx="12" cy="9" r="2.3"></circle></svg></button><div class="sky-location-label" id="skyLocationLabel">Detecting location…</div></div>
+<button class="sky-timelapse-btn" id="skyTimelapseOpen" onclick="toggleHomeTimeDrawer()" title="Open time travel and timelapse controls"><span class="sky-timelapse-icon">◷</span><span>TIME</span></button>
+<div class="sky-time-drawer" id="skyTimeDrawer" aria-hidden="true">
+  <div class="sky-time-drawer-head"><div><span class="section-kicker">TIME TRAVEL</span><strong>Explore the sky through time</strong></div><button class="sky-time-close" onclick="toggleHomeTimeDrawer(false)" aria-label="Close time controls">×</button></div>
+  <div class="sky-time-display" id="homeTtDisplay">Now</div>
+  <div class="sky-time-controls"><button class="tt-btn" onclick="nudgeTime(-60)">−1h</button><button class="tt-btn" onclick="nudgeTime(-15)">−15m</button><input class="tt-slider" id="homeTimeSlider" max="720" min="-720" oninput="onTimeSliderChange(this.value)" step="15" type="range" value="0"/><button class="tt-btn" onclick="nudgeTime(15)">+15m</button><button class="tt-btn" onclick="nudgeTime(60)">+1h</button></div>
+  <div class="sky-time-actions"><button class="tt-btn tt-now" onclick="resetTime()">Now</button><button class="tt-btn tt-timelapse" id="homeBtnTimelapse" onclick="toggleTimelapse()">▶ Timelapse</button></div>
+  <input class="tt-picker" id="homeTtPicker" onchange="jumpToDateTime(this.value)" type="datetime-local"/>
+</div>
+<div class="map-footer"><span id="mapHint">drag to pan · scroll to zoom · hover for info · double-click to slew</span><span id="skyTime">UTC --:--</span></div>
+<div class="sky-gesture-hint" id="skyGestureHint">Drag to explore · Pinch / scroll to zoom · Select an object to begin a journey</div></div></section><section aria-hidden="true" class="app-page page-explore" data-page="explore"><div class="page-heading"><div class="section-kicker">CELESTIAL OBJECTS &amp; TIME</div><h2>Explore the night</h2></div><div class="time-travel-wrap" id="timeTravelWrap">
+<div class="time-travel-box">
+<div class="tt-row">
+<span class="tt-label">Sky Time <span class="tt-badge" id="ttBadge">SIMULATED</span></span>
+<button class="tt-night-btn" id="btnNightMode" onclick="toggleNightMode()" title="Toggle night-vision (red) mode">🌙 Night Mode</button>
+</div>
+<div class="tt-row tt-controls">
+<button class="tt-btn" id="btnNudgeBack1h" onclick="nudgeTime(-60)" title="Back 1 hour">−1h</button>
+<button class="tt-btn" id="btnNudgeBack15m" onclick="nudgeTime(-15)" title="Back 15 min">−15m</button>
+<input class="tt-slider" id="timeSlider" max="720" min="-720" oninput="onTimeSliderChange(this.value)" step="15" type="range" value="0"/>
+<button class="tt-btn" id="btnNudgeFwd15m" onclick="nudgeTime(15)" title="Forward 15 min">+15m</button>
+<button class="tt-btn" id="btnNudgeFwd1h" onclick="nudgeTime(60)" title="Forward 1 hour">+1h</button>
+<button class="tt-btn tt-now" id="btnNowReset" onclick="resetTime()" title="Return to real time">Now</button>
+<button class="tt-btn tt-timelapse" id="btnTimelapse" onclick="toggleTimelapse()" title="Play the sky forward through time">▶ Timelapse</button>
+</div>
+<div class="tt-row tt-footer">
+<span id="ttDisplay">Now</span>
+<input class="tt-picker" id="ttPicker" onchange="jumpToDateTime(this.value)" type="datetime-local"/>
+</div>
+</div>
+</div><div class="panel panel-moon">
+<div class="panel-header" style="justify-content: center;"><span class="panel-title">Moon</span></div>
+<canvas height="100" id="moonCanvas" width="100"></canvas>
+<div class="moon-name" id="moonPhaseName">Loading...</div>
+<div class="moon-detail" id="moonIllum">Please wait</div>
+<div class="moon-time" id="moonTimes">UTC --:--</div>
+</div><div class="panel panel-planets">
+<div class="panel-header"><span class="panel-title">Planets</span></div>
+<div id="planetsList"><div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Loading planets...</div></div>
+</div><div class="panel panel-showers">
+<div class="panel-header"><span class="panel-title">Meteor Showers</span></div>
+<div id="showerList"><div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Loading meteor showers...</div></div>
+</div></section><section aria-hidden="true" class="app-page page-conditions" data-page="conditions"><div class="page-heading"><div class="section-kicker">YOUR LOCAL SKY</div><h2>Observing conditions</h2></div><div class="panel panel-weather">
+<div class="panel-header">
+<span class="panel-title">Conditions</span>
+<span class="panel-title" id="locName" style="text-transform: none; letter-spacing: 0; font-weight: 300; color: var(--text-dim);">--</span>
+</div>
+<div class="weather-grid">
+<div class="weather-cell"><div class="weather-val" id="wTemp">--</div><div class="weather-label">Temperature</div></div>
+<div class="weather-cell"><div class="weather-val" id="wHum">--</div><div class="weather-label">Humidity</div></div>
+<div class="weather-cell"><div class="weather-val" id="wCloud">--</div><div class="weather-label">Clouds</div></div>
+<div class="weather-cell"><div class="weather-val" id="wVis">--</div><div class="weather-label">Visibility</div></div>
+</div>
+<div class="bortle-wrap">
+<div class="bortle-top"><span>Light Pollution</span><span id="bortleClass">--</span></div>
+<div class="bortle-track"><div class="bortle-fill" id="bortleFill"></div></div>
+<div class="bortle-note" id="bortleNote">--</div>
+</div>
+</div></section><section aria-hidden="true" class="app-page page-live" data-page="live"><div class="page-heading"><div class="section-kicker">REAL-TIME TRACKING</div><h2>Live sky activity</h2></div><div class="panel panel-iss">
+<div class="panel-header"><span class="panel-title">ISS Live Tracker <span style="display:inline-block;width:8px;height:8px;background:var(--success);border-radius:50%;margin-left:8px;box-shadow:0 0 8px var(--success);animation:pulse 2s infinite;"></span></span></div>
+<div id="issList"><div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Loading live ISS data...</div></div>
+</div></section><section aria-hidden="true" class="app-page page-journal" data-page="journal"><div class="page-heading"><div class="section-kicker">YOUR OBSERVATIONS</div><h2>Observing journal</h2></div><div class="panel panel-log">
+<div class="panel-header">
+<span class="panel-title">Observing Log</span>
+<div class="panel-actions">
+<button class="panel-action" onclick="exportObservingLog()" title="Download your log as a JSON file">Export</button>
+<button class="panel-action" onclick="document.getElementById('logImportInput').click()" title="Restore a log from a JSON file">Import</button>
+<input accept="application/json" id="logImportInput" onchange="importObservingLog(this.files[0])" style="display:none;" type="file"/>
+</div>
+</div>
+<div class="log-add-row">
+<div class="log-last-viewed" id="logLastViewed">Hover or tap an object on the map, then log it here.</div>
+<button class="log-btn log-btn-primary" disabled="" id="btnLogLast" onclick="logLastViewed()">+ Log This Object</button>
+</div>
+<div class="log-add-row log-manual">
+<input class="log-input" id="logManualName" placeholder="Object name (e.g. M31, ISS pass)" type="text"/>
+<input class="log-input" id="logManualNotes" placeholder="Notes (optional)" type="text"/>
+<button class="log-btn" onclick="logManualEntry()">Add</button>
+</div>
+<div class="log-entries" id="logEntries">
+<div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">No observations logged yet.</div>
+</div>
+<div class="log-note">Saved only in this browser (no account/server). Use Export to back up or move your log to another device.</div>
+</div></section><section aria-hidden="true" class="app-page page-apod" data-page="apod"><div class="page-heading"><div class="section-kicker">NASA</div><h2>Astronomy picture of the day</h2></div><div class="panel panel-apod">
+<div class="panel-header">
+<span class="panel-title">NASA APOD</span>
+<span class="panel-title" style="text-transform: none; letter-spacing: 0; font-weight: 300; color: var(--text-dim);">Astronomy Picture of the Day</span>
+</div>
+<div id="apodContent"><div class="apod-loading"><div class="spinner"></div>Loading NASA APOD...</div></div>
+</div></section><section aria-hidden="true" class="app-page page-advanced" data-page="advanced"><div class="page-heading"><div class="section-kicker">ADVANCED INSTRUMENTATION</div><h2>Telescope &amp; astrometry</h2></div><section class="advanced-hero"><div class="advanced-hero-kicker">FOR EXPERIENCED OBSERVERS</div><h3>Precision tools that connect StarSight to real instruments.</h3><p>These tools are intentionally kept outside the cinematic sky experience. Use the manuals below before connecting hardware or submitting an image for plate solving.</p></section><section class="advanced-tool-card"><div class="advanced-tool-icon">⌖</div><div class="advanced-tool-copy"><div class="section-kicker">LX200 TELESCOPE CONTROL</div><h3>Connect a Meade LX200</h3><p>Connect a compatible LX200 mount over Web Serial. StarSight synchronizes time and observer location, then can read the mount position and slew to selected sky objects.</p><div class="advanced-steps"><span>01 · Chrome / Edge</span><span>02 · Connect USB / Serial</span><span>03 · Allow the port</span><span>04 · Return to Sky and select a target</span></div></div><button class="advanced-action" id="btnTelescope" onclick="connectTelescope()">Connect LX200</button></section><section class="advanced-tool-card"><div class="advanced-tool-icon">◎</div><div class="advanced-tool-copy"><div class="section-kicker">ASTROMETRY</div><h3>Plate solving</h3><p>Upload an astronomical image to identify its sky coordinates. Plate solving is an advanced workflow and requires a suitable star field with enough detectable stars.</p><div class="advanced-steps"><span>01 · Photograph the sky</span><span>02 · Upload the image</span><span>03 · Wait for the solution</span><span>04 · Use the coordinates for identification</span></div></div><button class="advanced-action" id="btnPlateSolve" onclick="document.getElementById('plateSolveInput').click()">Solve image</button><input accept="image/*" hidden id="plateSolveInput" onchange="handlePlateSolve(this.files[0])" type="file"/></section><div class="advanced-note"><strong>Why separate these?</strong> LX200 and plate solving are powerful but operationally complex. Keeping them here protects the first-screen experience while giving serious observers a dedicated place to learn the workflow.</div></section><section aria-hidden="true" class="app-page page-about" data-page="about"><div class="page-heading"><div class="section-kicker">PRECISION / DATA PROVENANCE</div><h2>Science &amp; sources</h2></div><div class="attribution">
+<div class="attribution-inner">
+<h3>Data Sources &amp; Attribution</h3>
+<div class="attribution-grid">
+<div class="attribution-item"><strong>Star Positions</strong><span><a href="https://www.cosmos.esa.int/web/gaia/dr3" rel="noopener" target="_blank">Gaia DR3</a> — ESA's billion-star catalog — for 131 stars (epoch 2016, propagated to J2000 with catalog proper motions), cross-matched via SIMBAD by Hipparcos number; the 72 very brightest stars (absent from Gaia DR3) use the Hipparcos-based <a href="http://tdc-www.harvard.edu/catalogs/bsc5.html" rel="noopener" target="_blank">Yale Bright Star Catalog</a>, 5th rev. ed. Distances from Gaia DR3 parallaxes.</span></div>
+<div class="attribution-item"><strong>Star Names &amp; Spectra</strong><span><a href="https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt" rel="noopener" target="_blank">IAU Catalog of Star Names</a> (WGSN) with historical aliases resolved via <a href="https://simbad.cds.unistra.fr/simbad/" rel="noopener" target="_blank">SIMBAD</a>. Visual magnitudes, color temperatures and luminosity classes from Yale BSC spectral types.</span></div>
+<div class="attribution-item"><strong>Deep Sky Objects</strong><span><a href="https://github.com/mattiaverga/OpenNGC" rel="noopener" target="_blank">OpenNGC</a> — License-friendly NGC/IC database compiled from professional sources. Full Messier catalog (all 110) plus a curated subset of 96 notable NGC/IC objects and the Magellanic Clouds, with J2000 positions, magnitudes, sizes, and types.</span></div>
+<div class="attribution-item"><strong>Planets, Moon &amp; Sun</strong><span><a href="https://github.com/cosinekitty/astronomy" rel="noopener" target="_blank">Astronomy Engine</a> by Don Cross — VSOP87-based ephemeris accurate to ±1 arcminute. Calculates positions, rise/set times, phases, and illumination for all solar system bodies.</span></div>
+<div class="attribution-item"><strong>Constellation Data</strong><span><a href="https://iauarchive.eso.org/public/themes/constellations/" rel="noopener" target="_blank">IAU Constellation Boundaries</a> (Delporte 1930) and <a href="https://github.com/ofrohn/d3-celestial" rel="noopener" target="_blank">Stellarium</a> line data. 88 official constellations with accurate boundary polygons.</span></div>
+<div class="attribution-item"><strong>Weather &amp; Location</strong><span><a href="https://open-meteo.com/" rel="noopener" target="_blank">Open-Meteo API</a> — free open-source weather data. No API key required. Licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener" target="_blank">CC BY 4.0</a>.</span></div>
+<div class="attribution-item"><strong>NASA APOD</strong><span><a href="https://api.nasa.gov/" rel="noopener" target="_blank">NASA Open APIs</a> — Astronomy Picture of the Day. Public domain images unless noted otherwise.</span></div>
+</div>
+<div class="attribution-note">All astronomical calculations use high-precision data sources. Star positions combine Gaia DR3 and the Hipparcos-based Yale BSC, propagated from J2000 with catalog proper motions. Planet positions use VSOP87 ephemeris via Astronomy Engine. Deep-sky objects from OpenNGC (full Messier + NGC/IC subset). Constellation boundaries follow IAU Delporte (1930) definitions. For research-grade astrometry, consult SIMBAD or VizieR.<br/>
+        © 2026 StarSight. Developed by Riasat Ahamed. All rights reserved.</div>
+</div>
+</div></section></div>
+
+<!-- LINK TO YOUR NEW JS FILE -->
+<!-- Data must load first -->
+<script src="data.js?v=28"></script>
+<script src="expanded_stars.js?v=28"></script>
+<!-- Standalone features -->
+<script src="telescope.js?v=28"></script>
+<script src="observingLog.js?v=28"></script>
+<script src="api.js?v=28"></script>
+<!-- Main logic loads last to kick everything off -->
+<script src="main.js?v=28"></script>
+<!-- Service Worker Registration -->
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js?v=28', { updateViaCache: 'none' })
+                .then(reg => {
+                    console.log('StarSight Service Worker registered:', reg.scope);
+                    // Ask the browser to check for a newer worker on each app load.
+                    reg.update().catch(() => {});
+                })
+                .catch(err => console.error('StarSight Service Worker registration failed:', err));
+        });
+    }
+</script>
+<script>
+(function(){
+const pages=[...document.querySelectorAll('.app-page')], navItems=[...document.querySelectorAll('[data-page-target]')];
+const drawer=document.getElementById('locationDrawer'), openLoc=document.getElementById('locationOpen'), closeLoc=document.getElementById('locationClose'), menu=document.getElementById('menuToggle'), backdrop=document.getElementById('mobileNavBackdrop'), nav=document.getElementById('mainNav');
+let current='sky', hideTimer;
+function visible(p){if(!p)return false;const c=getComputedStyle(p),r=p.getBoundingClientRect();return p.classList.contains('active')&&c.display!=='none'&&c.visibility!=='hidden'&&parseFloat(c.opacity||'1')>0&&r.height>0;}
+function refresh(name){try{if(name==='sky'){window.dispatchEvent(new Event('resize'));if(typeof drawMap==='function')drawMap();}else if(name==='explore'){if(typeof updatePlanets==='function')updatePlanets();if(typeof drawMoon==='function')drawMoon();if(typeof populateShowers==='function')populateShowers();}else if(name==='conditions'&&typeof fetchWeather==='function')fetchWeather();else if(name==='live'&&typeof updateISSLive==='function')updateISSLive();else if(name==='journal'&&typeof renderObservingLog==='function')renderObservingLog();else if(name==='apod'&&typeof fetchAPOD==='function')fetchAPOD();}catch(e){console.warn('StarSight refresh',e);}}
+function armChrome(){clearTimeout(hideTimer);document.body.classList.remove('chrome-rest');if(current==='sky')hideTimer=setTimeout(()=>document.body.classList.add('chrome-rest'),4200);}
+function showPage(name,push=true){
+  if(typeof arMode !== 'undefined' && arMode && name !== 'sky' && typeof exitAR === 'function') exitAR();
+  if(!document.querySelector('.app-page[data-page="'+name+'"]')) name='sky';
+  current=name; document.body.dataset.page=name;
+  pages.forEach(p=>{
+    const on=p.dataset.page===name;
+    p.classList.toggle('active',on); p.setAttribute('aria-hidden',String(!on));
+    p.style.setProperty('display', on ? 'block' : 'none', 'important'); p.style.setProperty('visibility', on ? 'visible' : 'hidden', 'important'); p.style.setProperty('pointer-events', on ? 'auto' : 'none', 'important');
+  });
+  navItems.forEach(b=>b.classList.toggle('active',b.dataset.pageTarget===name));
+  if(push&&history.replaceState) history.replaceState({page:name},'', '#'+name);
+  nav?.classList.remove('mobile-open'); backdrop?.classList.remove('visible'); drawer?.classList.remove('open');
+  window.scrollTo(0,0);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>refresh(name)));
+  armChrome();
+}
+function syncLocation(){const s=document.getElementById('locName'),d=document.getElementById('skyLocationLabel');if(d&&s)d.textContent=s.textContent&&s.textContent!=='--'?s.textContent:'Detecting location…';}
+navItems.forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.pageTarget)));openLoc?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});document.getElementById('hudLocation')?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});closeLoc?.addEventListener('click',()=>drawer?.classList.remove('open'));menu?.addEventListener('click',()=>{nav?.classList.toggle('mobile-open');backdrop?.classList.toggle('visible');});backdrop?.addEventListener('click',()=>{nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');});window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'sky',false));document.addEventListener('keydown',e=>{if(e.key==='Escape'){drawer?.classList.remove('open');nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');}});
+function recover(){const p=document.querySelector('.app-page.active');if(!visible(p))showPage(location.hash.slice(1)||current||'sky',false);else refresh(current);syncLocation();}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(recover,80);});window.addEventListener('pageshow',()=>setTimeout(recover,80));window.addEventListener('focus',()=>setTimeout(recover,80));setInterval(()=>{if(!document.hidden)recover();},15000);setInterval(syncLocation,1000);syncLocation();['pointermove','pointerdown','wheel','touchstart'].forEach(ev=>document.addEventListener(ev,armChrome,{passive:true}));showPage(location.hash.slice(1)||'sky',false);
+})();
+</script></body>
+</html>
