@@ -1,0 +1,19 @@
+StarSight — Voyager Mode / Mobile Cinematic Performance Pass
+
+Changed files:
+- main.js
+- index.html
+- style.css
+
+Key changes:
+1. Cosmic Journey renamed to Voyager Mode in the visible UI/help text.
+2. Voyager canvas DPR is capped lower on mobile/tablet so the full-screen animation has fewer pixels to render.
+3. Voyager canvas requests desynchronized rendering where supported.
+4. Destination artwork is rendered once into an offscreen cache, then scaled each frame instead of rebuilding expensive gradients/planet/galaxy artwork every frame.
+5. Background travelling stars are sampled more lightly on smaller screens.
+6. Journey easing changed to quintic smoothstep for a more natural cinematic acceleration/deceleration.
+7. The distance HUD now shows a large live light-years-travelled number above a sleek animated progress track.
+8. The progress number/DOM updates are throttled while the canvas remains frame-driven.
+9. Planet/Moon journey distances use their current Astronomy Engine distance converted to light-years when available.
+
+The normal sky map, star catalogue, AR code, telescope code and Timelapse code were not intentionally changed.

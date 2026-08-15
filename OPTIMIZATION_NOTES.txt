@@ -1,0 +1,24 @@
+StarSight — Timelapse Cinematic Frame-Pacing Pass
+
+Changed file: main.js only.
+
+This pass keeps the existing visuals and astronomical speed while improving
+Timelapse frame pacing:
+
+1. Timelapse now has one authoritative monotonic clock sampled from drawMap(),
+   instead of maintaining a second requestAnimationFrame loop alongside the
+   main renderer. This removes callback-order/frame-phase jitter.
+
+2. Simulation time is derived from the elapsed wall-clock time since Timelapse
+   started, preserving the existing 1.5 simulated minutes / 30 ms speed.
+
+3. The expensive auxiliary Timelapse UI refresh work is no longer performed
+   every 180 ms. The time-travel UI is refreshed at a 1-second cadence while
+   Timelapse is active, avoiding periodic DOM/canvas stalls in the cinematic
+   sky render. Normal UI refresh behavior resumes after Timelapse stops.
+
+4. The main canvas context requests desynchronized rendering where supported,
+   while retaining alpha transparency required by AR.
+
+No changes were made to the star catalogue, Milky Way density, AR behavior,
+normal sky-map rendering logic, visual styling, controls, or Timelapse speed.
