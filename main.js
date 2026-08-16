@@ -685,6 +685,7 @@ function applyCompassHeading(heading) {
     // South-up is rotateOffset=0. To put the direction the phone points at the
     // top of the sky, azimuth=heading must map to angle=0 => rotateOffset=180-heading.
     rotateOffset = ((180 - smoothCompassHeading + 540) % 360) - 180;
+    updateCompassDialVisual();
 }
 
 function processCompassOrientation(event) {
@@ -693,11 +694,27 @@ function processCompassOrientation(event) {
     if (heading !== null) applyCompassHeading(heading);
 }
 
+function updateCompassDialVisual() {
+    const compass = document.getElementById('skyCompass');
+    if (!compass) return;
+    const dial = compass.querySelector('.compass-dial');
+    const labels = compass.querySelector('.compass-labels');
+    // South-up is the neutral state: S is at the top. When compass mode is
+    // active, rotate the cardinal ring so the direction the phone points at
+    // is always under the fixed center crosshair. The crosshair itself never rotates.
+    const deg = compassModeActive && Number.isFinite(smoothCompassHeading)
+        ? (180 - smoothCompassHeading)
+        : 0;
+    if (dial) dial.style.transform = `rotate(${deg}deg)`;
+    if (labels) labels.style.transform = `rotate(${deg}deg)`;
+}
+
 function setCompassVisual(active) {
     const compass = document.getElementById('skyCompass');
     const hint = document.getElementById('compassHint');
     if (!compass) return;
     compass.classList.toggle('compass-active', active);
+    updateCompassDialVisual();
     compass.setAttribute('aria-pressed', active ? 'true' : 'false');
     compass.setAttribute('aria-label', active ? 'Compass alignment active. Tap to return to south-up' : 'Align sky to phone compass');
     compass.title = active ? 'Compass alignment active — tap to return south-up' : 'Tap to align sky with your phone direction';
@@ -3721,33 +3738,10 @@ function drawMap() {
         ctx.textAlign = 'center';
         ctx.fillText('Star map unavailable', canvas.width / Math.min(window.devicePixelRatio, 2) / 2, canvas.height / Math.min(window.devicePixelRatio, 2) / 2);
     }
-    // --- ROTATE COMPASS NEEDLE ---
-    const compass = document.getElementById('skyCompass');
-    const needle = document.getElementById('compassNeedle');
-    if (compass) compass.classList.add('south-up');
-    // Reveal the sky only after it has been rendered at its real backing-store size.
-    // This prevents the browser from briefly displaying a stretched, low-resolution
-    // 300x150 canvas on slower phones during page startup.
-    canvas.classList.add('sky-ready');
-
-    if (needle) {
-        if (arMode) {
-            // AR uses the same SOUTH-UP convention as the main planetarium.
-            // The live device heading is converted to the app's sky azimuth first.
-            const liveAzimuth = (arTrackingActive && smoothAlpha !== null)
-                ? (((360 - smoothAlpha + 180) % 360) + 360) % 360
-                : syntheticAzimuth;
-            needle.style.transform = `rotate(${180 - liveAzimuth}deg)`;
-        } else if (compassModeActive && Number.isFinite(smoothCompassHeading)) {
-            // In compass mode the red needle represents geographic north relative
-            // to the physical direction the phone is pointing. The dial itself is
-            // south-up, so north is 180° from its default upward orientation.
-            needle.style.transform = `rotate(${180 + smoothCompassHeading}deg)`;
-        } else {
-            // Default 2D sky map: fixed South-Up orientation.
-            needle.style.transform = 'rotate(180deg)';
-        }
-    }
+    // --- COMPASS DIAL ---
+    // The compass uses a fixed center crosshair. Only the N/E/S/W ring rotates,
+    // so the crosshair always marks the direction the phone is pointing.
+    updateCompassDialVisual();
     requestAnimationFrame(drawMap);
 }
 // Size the canvas synchronously before the first paint so its intrinsic backing
