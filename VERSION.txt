@@ -1,3 +1,2 @@
-StarSight v31.1 — Living Compass UI (fixed package)
-Base: working v31.1 WebGL build
-Changes: rotating N/E/S/W ring with fixed crosshair, 1.9s compass hint, round AR button, harmonious HUD.
+StarSight v31.2 — Compass UI + dependency/cache fix
+Built from the working v31.1 WebGL architecture. Includes all required scripts and service worker.

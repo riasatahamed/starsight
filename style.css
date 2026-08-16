@@ -384,7 +384,7 @@ body.ar-active .time-travel-wrap {
 
 /* 3. Override old mobile height restrictions */
 /* Prevent the browser from stretching the canvas's default 300x150 backing store during first paint. */
-#starCanvas { opacity: 0; position: relative; z-index: 1; }
+#starCanvas { opacity: 1; position: relative; z-index: 1; }
 #starWebGLCanvas {
   position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important;
   display: block; z-index: 2; pointer-events: none; opacity: 0;

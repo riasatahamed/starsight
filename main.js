@@ -2366,6 +2366,8 @@ try {
     console.warn('StarSight WebGL2 renderer failed; using Canvas 2D fallback.', e);
     starWebGLRenderer = null;
     starWebGLEnabled = false;
+    if (starWebGLCanvas) starWebGLCanvas.classList.remove('webgl-ready');
+    if (canvas) canvas.classList.add('sky-ready');
 }
 
 function getWebGLStarLodMag(mobile, moving, zoom) {

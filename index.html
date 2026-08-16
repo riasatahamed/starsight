@@ -14,28 +14,28 @@
 <!-- Open Graph -->
 <meta content="StarSight" property="og:title"/>
 <meta content="A precise telescope navigation and astronomy companion." property="og:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=28" property="og:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=312" property="og:image"/>
 <meta content="https://riasatahamed.github.io/starsight/" property="og:url"/>
 <meta content="website" property="og:type"/>
 <!-- Twitter / X -->
 <meta content="summary_large_image" name="twitter:card"/>
 <meta content="StarSight" name="twitter:title"/>
 <meta content="A precise telescope navigation and astronomy companion." name="twitter:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=28" name="twitter:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=312" name="twitter:image"/>
 <!-- Favicon -->
-<link href="images/StarSight_Logo.png?v=28" rel="icon" type="image/png"/>
+<link href="images/StarSight_Logo.png?v=312" rel="icon" type="image/png"/>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
 <!-- LINK TO YOUR NEW CSS FILE -->
-<link href="style.css?v=28" rel="stylesheet"/>
+<link href="style.css?v=312" rel="stylesheet"/>
 <!-- PWA & Mobile Meta -->
-<link href="manifest.json?v=28" rel="manifest"/>
+<link href="manifest.json?v=312" rel="manifest"/>
 <meta content="#05060a" name="theme-color"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="StarSight" name="apple-mobile-web-app-title"/>
-<link href="images/StarSight_Logo.png?v=28" rel="apple-touch-icon"/>
+<link href="images/StarSight_Logo.png?v=312" rel="apple-touch-icon"/>
 </head>
 <body>
 <div class="fixed-bg"></div>
@@ -273,20 +273,20 @@
 
 <!-- LINK TO YOUR NEW JS FILE -->
 <!-- Data must load first -->
-<script src="data.js?v=28"></script>
-<script src="expanded_stars.js?v=28"></script>
+<script src="data.js?v=312"></script>
+<script src="expanded_stars.js?v=312"></script>
 <!-- Standalone features -->
-<script src="telescope.js?v=27"></script>
-<script src="observingLog.js?v=27"></script>
-<script src="api.js?v=27"></script>
+<script src="telescope.js?v=312"></script>
+<script src="observingLog.js?v=312"></script>
+<script src="api.js?v=312"></script>
 <!-- Main logic loads last to kick everything off -->
-<script src="webgl-star-renderer.js?v=28"></script>
-<script src="main.js?v=28"></script>
+<script src="webgl-star-renderer.js?v=312"></script>
+<script src="main.js?v=312"></script>
 <!-- Service Worker Registration -->
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js?v=27', { updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=312', { updateViaCache: 'none' })
                 .then(reg => {
                     console.log('StarSight Service Worker registered:', reg.scope);
                     // Ask the browser to check for a newer worker on each app load.
