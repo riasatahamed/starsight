@@ -694,8 +694,12 @@ function updateCompassDialVisual() {
     const labels = compass.querySelector('.compass-labels');
     // South-up is neutral. In compass mode the cardinal ring rotates around a
     // fixed center crosshair; the crosshair itself never rotates.
+    // The sky rotation math above remains v31.1. The compass ring itself is
+    // intentionally mirrored relative to that transform so the physical
+    // direction being pointed at appears under the fixed center crosshair.
+    // Example: pointing East puts E at the top, not W.
     const deg = compassModeActive && Number.isFinite(smoothCompassHeading)
-        ? (180 - smoothCompassHeading)
+        ? (smoothCompassHeading - 180)
         : 0;
     if (dial) dial.style.transform = `rotate(${deg}deg)`;
     if (labels) labels.style.transform = `rotate(${deg}deg)`;
@@ -725,8 +729,8 @@ function setCompassVisual(active) {
 
 function showCompassHintOnce() {
     const hint = document.getElementById('compassHint');
-    if (!hint || sessionStorage.getItem('starsightCompassHintShown') === '1') return;
-    sessionStorage.setItem('starsightCompassHintShown', '1');
+    if (!hint) return;
+    hint.textContent = 'TAP TO ACTIVATE COMPASS';
     hint.classList.add('visible');
     clearTimeout(compassHintTimer);
     compassHintTimer = setTimeout(() => hint.classList.remove('visible'), 1900);
@@ -991,10 +995,12 @@ function recenterAR() {
     if (arMode) startAROrientationSensors();
 }
 
-function toggleSun() { 
-    sunForcedOff = !sunForcedOff; 
-    document.getElementById('btnSunMap').classList.toggle('active', !sunForcedOff); 
-    targetSunAnim = sunForcedOff ? 0.0 : 1.0; 
+function toggleSun() {
+    sunForcedOff = !sunForcedOff;
+    setSkyToolActive('sun', !sunForcedOff);
+    targetSunAnim = sunForcedOff ? 0.0 : 1.0;
+    showSkyToolStatus(`DAYLIGHT ${sunForcedOff ? 'OFF' : 'ON'}`);
+    drawMap();
 }
 
 function toggleAR() {
@@ -3751,7 +3757,7 @@ resizeCanvas();
 const skyCompassButton = document.getElementById('skyCompass');
 if (skyCompassButton) {
     skyCompassButton.addEventListener('click', toggleCompassAlignment);
-    setTimeout(showCompassHintOnce, 500);
+    setTimeout(() => { syncSkyToolStates(); showCompassHintOnce(); }, 500);
 }
 drawMap();
 
@@ -4138,10 +4144,54 @@ canvas.addEventListener('touchend', e => {
     }
 });
 
-function toggleConstellations() { showConstellations = !showConstellations; document.getElementById('btnConst').classList.toggle('active', showConstellations); }
-function toggleGrid() { showGrid = !showGrid; document.getElementById('btnGrid').classList.toggle('active', showGrid); }
-function toggleHorizon() { showHorizon = !showHorizon; document.getElementById('btnHorizon').classList.toggle('active', showHorizon); }
-function toggleRotateMode() { rotateMode = !rotateMode; document.getElementById('btnRotate').classList.toggle('active', rotateMode); updateMapHint(); }
+function setSkyToolActive(tool, active) {
+    const btn = document.querySelector(`.sky-tool-icon[data-tool=\"${tool}\"]`);
+    if (btn) btn.classList.toggle('active', !!active);
+}
+
+let skyToolStatusTimer = null;
+function showSkyToolStatus(message) {
+    const el = document.getElementById('skyToolStatus');
+    if (!el) return;
+    el.textContent = message;
+    el.classList.add('visible');
+    clearTimeout(skyToolStatusTimer);
+    skyToolStatusTimer = setTimeout(() => el.classList.remove('visible'), 1100);
+}
+
+function syncSkyToolStates() {
+    setSkyToolActive('constellations', showConstellations);
+    setSkyToolActive('grid', showGrid);
+    setSkyToolActive('horizon', showHorizon);
+    setSkyToolActive('rotate', rotateMode);
+    setSkyToolActive('sun', !sunForcedOff);
+    setSkyToolActive('night', !!document.documentElement.classList.contains('night-mode'));
+}
+
+function toggleConstellations() {
+    showConstellations = !showConstellations;
+    setSkyToolActive('constellations', showConstellations);
+    showSkyToolStatus(`CONSTELLATIONS ${showConstellations ? 'ON' : 'OFF'}`);
+    drawMap();
+}
+function toggleGrid() {
+    showGrid = !showGrid;
+    setSkyToolActive('grid', showGrid);
+    showSkyToolStatus(`GRID ${showGrid ? 'ON' : 'OFF'}`);
+    drawMap();
+}
+function toggleHorizon() {
+    showHorizon = !showHorizon;
+    setSkyToolActive('horizon', showHorizon);
+    showSkyToolStatus(`HORIZON ${showHorizon ? 'ON' : 'OFF'}`);
+    drawMap();
+}
+function toggleRotateMode() {
+    rotateMode = !rotateMode;
+    setSkyToolActive('rotate', rotateMode);
+    showSkyToolStatus(`ROTATE MODE ${rotateMode ? 'ON' : 'OFF'}`);
+    updateMapHint();
+}
 
 function drawMoon() {
     try {
@@ -4501,6 +4551,9 @@ function showTimelapseBlockMessage() {
 
 // --- NIGHT VISION (RED) MODE ---
 function toggleNightMode() {
+    // Keep the home sky-tool dock in sync with the existing night-vision state.
+    setSkyToolActive('night', !document.documentElement.classList.contains('night-mode'));
+    showSkyToolStatus(`NIGHT VISION ${document.documentElement.classList.contains('night-mode') ? 'OFF' : 'ON'}`);
     const isNight = document.documentElement.classList.toggle('night-mode');
     [document.getElementById('btnNightMode'), document.getElementById('btnNightModeHome')].forEach(btn => {
         if (btn) btn.classList.toggle('active', isNight);
