@@ -699,7 +699,7 @@ function updateCompassDialVisual() {
     // direction being pointed at appears under the fixed center crosshair.
     // Example: pointing East puts E at the top, not W.
     const deg = compassModeActive && Number.isFinite(smoothCompassHeading)
-        ? (smoothCompassHeading - 180)
+        ? (180 - smoothCompassHeading)
         : 0;
     if (dial) dial.style.transform = `rotate(${deg}deg)`;
     if (labels) labels.style.transform = `rotate(${deg}deg)`;
