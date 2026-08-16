@@ -687,26 +687,25 @@ function applyCompassHeading(heading) {
     rotateOffset = ((180 - smoothCompassHeading + 540) % 360) - 180;
     updateCompassDialVisual();
 }
-
-function processCompassOrientation(event) {
-    if (!compassModeActive || arMode) return;
-    const heading = getCompassHeadingFromEvent(event);
-    if (heading !== null) applyCompassHeading(heading);
-}
-
 function updateCompassDialVisual() {
     const compass = document.getElementById('skyCompass');
     if (!compass) return;
     const dial = compass.querySelector('.compass-dial');
     const labels = compass.querySelector('.compass-labels');
-    // South-up is the neutral state: S is at the top. When compass mode is
-    // active, rotate the cardinal ring so the direction the phone points at
-    // is always under the fixed center crosshair. The crosshair itself never rotates.
+    // South-up is neutral. In compass mode the cardinal ring rotates around a
+    // fixed center crosshair; the crosshair itself never rotates.
     const deg = compassModeActive && Number.isFinite(smoothCompassHeading)
         ? (180 - smoothCompassHeading)
         : 0;
     if (dial) dial.style.transform = `rotate(${deg}deg)`;
     if (labels) labels.style.transform = `rotate(${deg}deg)`;
+}
+
+
+function processCompassOrientation(event) {
+    if (!compassModeActive || arMode) return;
+    const heading = getCompassHeadingFromEvent(event);
+    if (heading !== null) applyCompassHeading(heading);
 }
 
 function setCompassVisual(active) {
@@ -3739,8 +3738,8 @@ function drawMap() {
         ctx.fillText('Star map unavailable', canvas.width / Math.min(window.devicePixelRatio, 2) / 2, canvas.height / Math.min(window.devicePixelRatio, 2) / 2);
     }
     // --- COMPASS DIAL ---
-    // The compass uses a fixed center crosshair. Only the N/E/S/W ring rotates,
-    // so the crosshair always marks the direction the phone is pointing.
+    // The center crosshair stays fixed. Only the N/E/S/W ring rotates so the
+    // direction the phone is pointing at remains under the crosshair.
     updateCompassDialVisual();
     requestAnimationFrame(drawMap);
 }
