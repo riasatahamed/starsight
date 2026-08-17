@@ -1,0 +1,36 @@
+StarSight — Third-party artwork
+
+CONSTELLATION ARTWORK
+--------------------
+Artist: Johan Meuris (Jomejome)
+Originally created for Stellarium.
+License: Free Art License (FAL)
+
+StarSight loads the Western constellation illustration assets from the
+Stellarium Sky Cultures repository:
+https://github.com/Stellarium/stellarium-skycultures
+
+The Stellarium project credits the constellation artwork to Johan Meuris and
+identifies the artwork license as the Free Art License.
+
+Source artwork directory:
+https://github.com/Stellarium/stellarium-skycultures/tree/master/western/illustrations
+
+Source constellation anchor metadata:
+https://github.com/Stellarium/stellarium-skycultures/blob/master/western/index.json
+
+License text:
+https://artlibre.org/licence/lal/en/
+
+The artwork is displayed by StarSight as a separately licensed third-party
+component. StarSight's own source code and other assets are not relicensed by
+this notice.
+
+
+STELLARIUM-DERIVED CONSTELLATION LINE DATA
+-------------------------------------------
+Project: johanley/constellation-lines
+License: CC0-1.0
+The project publishes HIP-based constellation stick-figure line data derived from widely used/Stellarium constellation line data. Source: https://github.com/johanley/constellation-lines
+
+Stellarium sky-culture reference: https://github.com/Stellarium/stellarium-skycultures

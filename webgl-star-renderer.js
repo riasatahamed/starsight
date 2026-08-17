@@ -79,7 +79,7 @@
     float zoom = (uArMode > 0.5) ? uArZoom : uZoom;
     float r = max(uViewportW, uViewportH) * 0.85 * zoom;
     float dist = (90.0 - altDeg) / 90.0 * r;
-    float angle = az - PI + radians(uRotateDeg);
+    float angle = az + radians(uRotateDeg);
     float x = uViewportW * 0.5 + uPanX + dist * sin(angle);
     float y = uViewportH * 0.5 + uPanY - dist * cos(angle);
 

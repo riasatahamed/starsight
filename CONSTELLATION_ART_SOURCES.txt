@@ -1,0 +1,16 @@
+StarSight constellation artwork provenance
+
+Artwork: Johan Meuris (Jomejome), originally created for Stellarium.
+License: Free Art License (FAL).
+Source repository: https://github.com/Stellarium/stellarium-skycultures/tree/master/western/illustrations
+Metadata/anchors: https://github.com/Stellarium/stellarium-skycultures/blob/master/western/index.json
+
+StarSight v31.5 uses the official western sky-culture illustration set. There are 85 illustration entries in the Stellarium western index; Puppis, Serpens and Vela do not have illustration entries there.
+
+The images are loaded lazily from the official Stellarium sky-cultures repository only when needed for the current viewport. The application does not copy the Stellarium software itself.
+
+Constellation line data
+-----------------------
+Western stick-figure line data: HIP-based constellation line set derived from Stellarium Western sky-culture data, distributed in the CC0 constellation-lines project by Johan Ley (johanley/constellation-lines). The project states its HIP line output uses Hipparcos identifiers and is CC0. StarSight cross-matches these HIP positions to its existing star catalogue so the lines share the same projected stars as the artwork.
+
+Stellarium Western sky-culture format/reference: Stellarium/stellarium-skycultures, western/index.json. The format defines constellation line paths as Hipparcos IDs and artwork using three HIP anchors.

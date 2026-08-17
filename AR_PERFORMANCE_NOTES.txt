@@ -1,0 +1,7 @@
+StarSight v31.8.6
+AR performance policy:
+- Constellation lines and artwork are disabled in AR.
+- Main sky map retains constellation lines and Stellarium artwork.
+- Stellarium synthetic/HIP helper points are geometry-only and are not added to ALL_STARS.
+- This avoids duplicate star sprites and unnecessary AR Canvas work.
+- AR starts with constellations off.

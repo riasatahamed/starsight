@@ -429,7 +429,9 @@ document.addEventListener('visibilitychange', () => {
     if (timelapseActive && document.visibilityState === 'visible') requestTimelapseWakeLock();
 });
 
-let showConstellations = true, showGrid = false, showHorizon = true;
+let showConstellations = false, showGrid = false, showHorizon = true;
+let constellationDisplayMode = 0; // 0 = off, 1 = constellation lines, 2 = artwork
+let preArConstellationDisplayMode = 0;
 let zoomLevel = 1;
 let visualZoomLevel = 1; // eased visual scale for cinematic zoom transitions
 let currentBortle = 5;            
@@ -513,8 +515,25 @@ let smoothAlpha = null;
 let smoothBeta = null;
 let smoothGamma = null;
 const SMOOTH_K = 0.12; 
-let syntheticAzimuth = 180; // SOUTH-UP initial sky center
-let syntheticAltitude = 0; 
+let syntheticAzimuth = 0; 
+// AR PERFORMANCE POLICY (v31.8.6):
+// Constellation lines/artwork are intentionally disabled in AR.
+// The main sky map retains the full constellation system.
+function disableARConstellationsForPerformance() {
+    try {
+        if (typeof constellationMode !== 'undefined') constellationMode = 'off';
+        if (typeof showConstellations !== 'undefined') showConstellations = false;
+        if (typeof constellationArtEnabled !== 'undefined') constellationArtEnabled = false;
+    } catch (_) {}
+}
+
+// AR synthetic/manual pose: North centred
+let syntheticAltitude = 0;
+let arNorthInitialized = false;
+let arYawCalibrationDeg = 0;
+let arInitialHeading = null;
+let arCurrentHeading = null;
+let arPoseReady = false; 
 
 let sunForcedOff = false;
 let targetSunAnim = 1.0; 
@@ -525,11 +544,11 @@ function updateMapHint() {
     if (!hint) return;
     const touchFirst = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
     if (arMode) {
-        hint.textContent = touchFirst ? 'AR Active · point phone at sky' : 'AR Active · point phone at sky to locate objects';
+        hint.textContent = touchFirst ? 'AR Active · move phone to explore the sky' : 'AR Active · move the view to explore the sky';
     } else if (touchFirst) {
-        hint.textContent = compassModeActive ? 'phone compass active · tap compass to return south-up' : (rotateMode ? 'drag to rotate · pinch to zoom · tap for info · long-press to explore' : 'drag to pan · pinch to zoom · tap for info · long-press to explore');
+        hint.textContent = compassModeActive ? 'phone compass active · tap compass to return north-up' : (rotateMode ? 'drag to rotate · pinch to zoom · tap for info · long-press to explore' : 'drag to pan · pinch to zoom · tap for info · long-press to explore');
     } else if (rotateMode) {
-        hint.textContent = compassModeActive ? 'phone compass active · tap compass to return south-up' : 'drag to rotate · scroll/pinch to zoom · hover for info · hold an object to explore';
+        hint.textContent = compassModeActive ? 'phone compass active · tap compass to return north-up' : 'drag to rotate · scroll/pinch to zoom · hover for info · hold an object to explore';
     } else {
         hint.textContent = 'drag to pan · scroll to zoom · hover for info · long-press to explore · double-click to slew';
     }
@@ -623,10 +642,18 @@ function updateRMatrixFromSynthetic() {
 function freezeARTrackingForManualGesture() {
     if (!arTrackingActive) return;
 
-    // Freeze at the exact device pose at the moment the user starts dragging.
-    // Keep the camera feed running if Camera AR is active; only the sky control
-    // changes from sensor-driven to manual.
-    if (Number.isFinite(smoothAlpha)) syntheticAzimuth = ((360 - smoothAlpha + 180) % 360 + 360) % 360;
+    // Preserve the exact North-referenced view at the instant tracking is frozen.
+    // AR opens with North centred; subsequent device motion is relative to the
+    // initial true-north heading. Convert that current relative heading into the
+    // synthetic/manual coordinate system before disabling sensor tracking.
+    if (Number.isFinite(arCurrentHeading) && Number.isFinite(arInitialHeading)) {
+        let delta = arCurrentHeading - arInitialHeading;
+        while (delta > 180) delta -= 360;
+        while (delta < -180) delta += 360;
+        syntheticAzimuth = ((180 - delta) % 360 + 360) % 360;
+    } else if (Number.isFinite(smoothAlpha)) {
+        syntheticAzimuth = ((360 - smoothAlpha + 180) % 360 + 360) % 360;
+    }
     if (Number.isFinite(smoothBeta)) syntheticAltitude = Math.max(-90, Math.min(90, smoothBeta - 90));
 
     arTrackingActive = false;
@@ -682,9 +709,9 @@ function applyCompassHeading(heading) {
         smoothCompassHeading = (smoothCompassHeading + 360) % 360;
     }
 
-    // South-up is rotateOffset=0. To put the direction the phone points at the
-    // top of the sky, azimuth=heading must map to angle=0 => rotateOffset=180-heading.
-    rotateOffset = ((180 - smoothCompassHeading + 540) % 360) - 180;
+    // North-up is rotateOffset=0. To put the direction the phone points at the
+    // top of the sky, azimuth=heading must map to angle=0 => rotateOffset=-heading.
+    rotateOffset = ((-smoothCompassHeading + 540) % 360) - 180;
     updateCompassDialVisual();
 }
 function updateCompassDialVisual() {
@@ -692,14 +719,11 @@ function updateCompassDialVisual() {
     if (!compass) return;
     const dial = compass.querySelector('.compass-dial');
     const labels = compass.querySelector('.compass-labels');
-    // South-up is neutral. In compass mode the cardinal ring rotates around a
+    // North-up is neutral. In compass mode the cardinal ring rotates around a
     // fixed center crosshair; the crosshair itself never rotates.
-    // The sky rotation math above remains v31.1. The compass ring itself is
-    // intentionally mirrored relative to that transform so the physical
-    // direction being pointed at appears under the fixed center crosshair.
     // Example: pointing East puts E at the top, not W.
     const deg = compassModeActive && Number.isFinite(smoothCompassHeading)
-        ? (180 - smoothCompassHeading)
+        ? (-smoothCompassHeading)
         : 0;
     if (dial) dial.style.transform = `rotate(${deg}deg)`;
     if (labels) labels.style.transform = `rotate(${deg}deg)`;
@@ -719,8 +743,8 @@ function setCompassVisual(active) {
     compass.classList.toggle('compass-active', active);
     updateCompassDialVisual();
     compass.setAttribute('aria-pressed', active ? 'true' : 'false');
-    compass.setAttribute('aria-label', active ? 'Compass alignment active. Tap to return to south-up' : 'Align sky to phone compass');
-    compass.title = active ? 'Compass alignment active — tap to return south-up' : 'Tap to align sky with your phone direction';
+    compass.setAttribute('aria-label', active ? 'Compass alignment active. Tap to return to north-up' : 'Align sky to phone compass');
+    compass.title = active ? 'Compass alignment active — tap to return north-up' : 'Tap to align sky with your phone direction';
     if (hint) {
         hint.textContent = active ? 'COMPASS ACTIVE' : 'TAP TO ALIGN';
         hint.classList.toggle('active', active);
@@ -832,8 +856,26 @@ function processOrientation(event) {
     _screenSin = Math.sin(screenRad);
     updateRMatrixFromSmooth();
 
-    const warningEl = document.getElementById('arWarning');
-    if (warningEl) warningEl.style.display = R_matrix[8] > 0.1 ? 'block' : 'none';
+    // Establish a true-North reference from the same absolute heading source used
+    // by the compass. Do NOT infer north from the camera rotation matrix: that
+    // matrix is in the device/camera basis and its forward vector is 180° ambiguous
+    // for the landscape/portrait sensor convention used by Android Chrome.
+    const heading = getCompassHeadingFromEvent(event);
+    if (Number.isFinite(heading)) {
+        arCurrentHeading = heading;
+        if (!arNorthInitialized) {
+            arInitialHeading = heading;
+            // In this camera basis, 180° is the North-centred synthetic reference.
+            // Rotating the celestial ENU basis by (180 - heading) makes the current
+            // real-world phone direction coincide with North on the first AR frame.
+            arYawCalibrationDeg = 180 - heading;
+            while (arYawCalibrationDeg > 180) arYawCalibrationDeg -= 360;
+            while (arYawCalibrationDeg < -180) arYawCalibrationDeg += 360;
+            arNorthInitialized = true;
+            arPoseReady = true;
+        }
+    }
+
 }
 
 function startAROrientationSensors() {
@@ -950,9 +992,14 @@ function stopARCameraAndSensors() {
     
     panX = 0; panY = 0; rotateOffset = 0; 
     smoothAlpha = null; smoothBeta = null; smoothGamma = null;
+    arNorthInitialized = false;
+    arYawCalibrationDeg = 0;
+    compassAbsoluteSeen = false;
+    arInitialHeading = null;
+    arCurrentHeading = null;
+    arPoseReady = false;
     absoluteModeActive = false;
     cameraActive = false;
-    document.getElementById('arWarning').style.display = 'none';
 }
 
 function restoreMapUI() {
@@ -988,8 +1035,14 @@ function recenterAR() {
     smoothBeta = null;
     smoothGamma = null;
     absoluteModeActive = false;
-    syntheticAzimuth = 180;
+    syntheticAzimuth = 0;
     syntheticAltitude = 0;
+    arNorthInitialized = false;
+    arYawCalibrationDeg = 0;
+    compassAbsoluteSeen = false;
+    arInitialHeading = null;
+    arCurrentHeading = null;
+    arPoseReady = false;
     updateRMatrixFromSynthetic();
     arZoomLevel = 1.0;
     if (arMode) startAROrientationSensors();
@@ -1012,6 +1065,12 @@ function toggleAR() {
     if (starWebGLCanvas) starWebGLCanvas.classList.toggle('webgl-ready', !arMode && starWebGLEnabled);
     
     if (arMode) {
+        // AR is intentionally clean by default. Constellation rendering can be
+        // enabled from the dedicated AR HUD button when desired.
+        preArConstellationDisplayMode = constellationDisplayMode;
+        constellationDisplayMode = 0;
+        showConstellations = false;
+        syncArConstellationButton();
         document.body.classList.add('ar-active');
         if (!panel.classList.contains('fullscreen-mode')) {
             panel.classList.add('fullscreen-mode');
@@ -1049,14 +1108,25 @@ function toggleAR() {
 
         document.getElementById('btnRecenter').style.display = arTrackingActive ? 'none' : 'block';
         
-        syntheticAzimuth = 180;
+        // Seed the fallback/manual AR pose with North centred. The live sensor
+        // path is gated until a real absolute heading establishes the same North
+        // reference, so the first visible frame cannot use a South-Up matrix.
+        syntheticAzimuth = 0;
         syntheticAltitude = 0;
-        if (!arTrackingActive) updateRMatrixFromSynthetic();
+        arNorthInitialized = false;
+        arYawCalibrationDeg = 0;
+        compassAbsoluteSeen = false;
+        arInitialHeading = null;
+        arCurrentHeading = null;
+        arPoseReady = false;
+        updateRMatrixFromSynthetic();
             
         if (arTrackingActive) {
             startAROrientationSensors();
         }
     } else {
+        constellationDisplayMode = preArConstellationDisplayMode;
+        showConstellations = constellationDisplayMode !== 0;
         document.body.classList.remove('ar-active');
         stopCompassAlignment(true);
         stopARCameraAndSensors();
@@ -1830,6 +1900,40 @@ function cacheENUFromAltAz(pt, alt, az) {
 function projectENU(E, N, U) {
     const w = _projW, h = _projH, cx = _projCx, cy = _projCy;
     const focalLength = Math.max(w, h) * 0.85 * arZoomLevel;
+
+    // Desktop/no-sensor AR: use the same North-Up celestial projection as the
+    // normal map. The previous fallback R_matrix pointed SOUTH on frame one.
+    if (!arTrackingActive) {
+        // Desktop/manual AR uses a true North-Up virtual camera. The camera
+        // center is defined by both azimuth and altitude, so vertical dragging
+        // changes the view as naturally as horizontal dragging.
+        const centerAz = syntheticAzimuth * Math.PI / 180;
+        const centerAlt = syntheticAltitude * Math.PI / 180;
+        const cosC = Math.cos(centerAz), sinC = Math.sin(centerAz);
+        const cosA = Math.cos(centerAlt), sinA = Math.sin(centerAlt);
+
+        // Camera basis in Earth-fixed ENU coordinates:
+        //   right   = [ cos(C), -sin(C), 0 ]
+        //   up      = [-sin(A)sin(C), -sin(A)cos(C), cos(A)]
+        //   forward = [ cos(A)sin(C),  cos(A)cos(C), sin(A)]
+        // At C=0,A=0 this means North is straight ahead, East is right,
+        // and zenith is up.
+        const dx = E * cosC - N * sinC;
+        const dy = -E * sinA * sinC - N * sinA * cosC + U * cosA;
+        const dz = E * cosA * sinC + N * cosA * cosC + U * sinA;
+        const z_depth = dz;
+        if (z_depth <= 0.01) return { x: -9999, y: -9999, dist: 0, onScreen: false, z3d: z_depth };
+        const px = (dx / z_depth) * focalLength;
+        const py = (dy / z_depth) * focalLength;
+        const sx = px * _screenCos + py * _screenSin;
+        const sy = -px * _screenSin + py * _screenCos;
+        const x = cx + sx;
+        const y = cy - sy;
+        const onScreen = x > -w && x < w*2 && y > -h && y < h*2;
+        return { x, y, dist: 1, onScreen, z3d: z_depth };
+    }
+
+    // Real-device AR: use the Earth-referenced device orientation matrix.
     const dx = R_matrix[0] * E + R_matrix[3] * N + R_matrix[6] * U;
     const dy = R_matrix[1] * E + R_matrix[4] * N + R_matrix[7] * U;
     const dz = R_matrix[2] * E + R_matrix[5] * N + R_matrix[8] * U;
@@ -1867,7 +1971,7 @@ function projectAz(alt, az) {
         const cyp = cy + panY;
         const r = Math.max(w, h) * 0.85 * zoomLevel;
         const dist = (90 - alt) / 90 * r;
-        const angleRad = (az - 180 + rotateOffset) * Math.PI / 180;
+        const angleRad = (az + rotateOffset) * Math.PI / 180;
         const x = cxp + dist * Math.sin(angleRad);
         const y = cyp - dist * Math.cos(angleRad);
         const onScreen = x > -50 && x < w + 50 && y > -50 && y < h + 50;
@@ -2302,6 +2406,275 @@ for (let i = 0; i < ALL_STARS.length; i++) {
 // of filtering and sorting the whole catalogue on every AR frame.
 const NAMED_STARS_BY_MAG = ALL_STARS.filter(s => s.name).sort((a, b) => a.mag - b.mag);
 
+
+// --- STELLARIUM WESTERN CONSTELLATION LAYER ---
+// The stick-figure paths are stored as HIP-based polylines. At startup we
+// cross-match those HIP positions to StarSight's existing bright-star catalogue
+// so the line layer shares the exact same projected star objects as the sky.
+let STELLARIUM_LINE_STARS = [];
+let STELLARIUM_CONSTELLATION_PATHS = [];
+let STELLARIUM_LINE_STAR_SET = new Set();
+let STELLARIUM_HIP_STAR_MAP = new Map();
+
+function angularSeparationDeg(ra1, dec1, ra2, dec2) {
+    let dra = ((ra2 - ra1 + 180) % 360) - 180;
+    const c = Math.cos(dec1 * Math.PI / 180);
+    return Math.hypot(dra * c, dec2 - dec1);
+}
+
+function initStellariumConstellationLayer() {
+    if (typeof STELLARIUM_CONSTELLATION_DATA === 'undefined') return;
+    const srcStars = STELLARIUM_CONSTELLATION_DATA.stars || [];
+    const matched = new Array(srcStars.length);
+
+    // This is a one-time startup cross-match. It lets the constellation layer
+    // reuse StarSight's existing stars instead of maintaining a second catalogue.
+    for (let i = 0; i < srcStars.length; i++) {
+        const src = srcStars[i];
+        let best = null;
+        for (let j = 0; j < ALL_STARS.length; j++) {
+            const star = ALL_STARS[j];
+            const d = angularSeparationDeg(src.ra, src.dec, star.ra, star.dec);
+            if (!best || d < best.d) best = { star, d };
+        }
+        // 1.2 arcmin is deliberately tight enough to avoid false matches.
+        if (best && best.d <= 0.02) {
+            matched[i] = best.star;
+        } else {
+            // A very small number of HIP stars (notably variable/poorly represented
+            // entries) are absent from StarSight's visible catalogue. Keep them as
+            // lightweight line-only stars so the official stick figure remains intact.
+            matched[i] = {
+                name: `HIP ${src.hip}`,
+                ra: src.ra, dec: src.dec,
+                pmRa: src.pmRa || 0, pmDec: src.pmDec || 0,
+                mag: src.mag, temp: 5800, const: '',
+                _sinDec: Math.sin(src.dec * Math.PI / 180),
+                _cosDec: Math.cos(src.dec * Math.PI / 180),
+                _stellariumSynthetic: true
+            };
+        }
+        matched[i]._stellariumLineStar = true;
+        STELLARIUM_LINE_STAR_SET.add(matched[i]);
+    }
+
+    STELLARIUM_LINE_STARS = matched;
+    STELLARIUM_HIP_STAR_MAP = new Map();
+    for (let i = 0; i < srcStars.length; i++) {
+        const src = srcStars[i];
+        if (Number.isFinite(src.hip) && matched[i]) STELLARIUM_HIP_STAR_MAP.set(src.hip, matched[i]);
+    }
+    STELLARIUM_CONSTELLATION_PATHS = (STELLARIUM_CONSTELLATION_DATA.constellations || []).map(([abbr, paths]) => ({
+        abbr, paths: paths.map(path => path.map(i => matched[i]).filter(Boolean))
+    }));
+
+    // Synthetic line-only stars must participate in Canvas rendering and WebGL's
+    // screen-position bookkeeping, but are not uploaded as duplicate star pixels.
+    for (const star of matched) {
+        if (star._stellariumSynthetic && !ALL_STARS.includes(star)) ALL_STARS.push(star);
+    }
+
+    console.log(`✨ Stellarium Western constellation layer: ${STELLARIUM_CONSTELLATION_PATHS.length} constellations / ${STELLARIUM_LINE_STARS.length} HIP stars.`);
+}
+
+initStellariumConstellationLayer();
+
+// --- OPEN-SOURCE CONSTELLATION ART ---
+// Johan Meuris / Stellarium constellation illustrations.
+// The artwork is released under the Free Art License; see THIRD_PARTY_LICENSES.txt.
+// StarSight uses the official Stellarium western anchor geometry.
+//
+// Performance design:
+//   * 85 available Western constellation illustrations (the Stellarium western
+//     culture has no illustration entry for Puppis, Serpens or Vela).
+//   * Images are lazy-loaded only when their constellation is actually near the
+//     current viewport.
+//   * At most a small set of artworks is rendered at once, so enabling ART does
+//     not turn 85 image draws into an every-frame workload on mobile.
+const STELLARIUM_ART_BASE = 'https://raw.githubusercontent.com/Stellarium/stellarium-skycultures/master/western/illustrations/';
+const CONSTELLATION_ART = (typeof STELLARIUM_ART_MANIFEST !== 'undefined' ? STELLARIUM_ART_MANIFEST : []).map(a => ({
+    ...a, image: null, loaded: false, loading: false, failed: false
+}));
+const ART_MAX_VISIBLE = 12;
+const ART_MAX_LOADED = 18;
+
+function unloadDistantArt() {
+    let loaded = CONSTELLATION_ART.filter(a => a.loaded && a.image);
+    if (loaded.length <= ART_MAX_LOADED) return;
+    loaded.sort((a,b) => (a._lastUsed || 0) - (b._lastUsed || 0));
+    for (let i = 0; i < loaded.length - ART_MAX_LOADED; i++) {
+        const a = loaded[i];
+        a.image = null;
+        a.loaded = false;
+    }
+}
+
+function ensureArtImage(art) {
+    if (art.loaded || art.loading || art.failed) return;
+    art.loading = true;
+    const img = new Image();
+    img.decoding = 'async';
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+        art.image = img;
+        art.loaded = true;
+        art.loading = false;
+        art.failed = false;
+        art._lastUsed = performance.now();
+        unloadDistantArt();
+        drawMap();
+    };
+    img.onerror = () => {
+        art.loading = false;
+        art.failed = true;
+    };
+    img.src = STELLARIUM_ART_BASE + art.file;
+}
+
+function projectArtAnchor(anchor, astroTime, observer) {
+    if (!anchor) return null;
+
+    // IMPORTANT: artwork anchors must use the exact same screen-space star
+    // positions as the visible star renderer. Previously the artwork recalculated
+    // its own RA/Dec -> Alt/Az path with Astronomy.Horizon while WebGL used the
+    // fast catalogue projection. The tiny numerical/timing differences made the
+    // artwork drift by sub-pixels over the stars, which looked like the stars were
+    // vibrating when artwork mode was enabled.
+    const hip = Number(anchor[4]);
+    let pt = Number.isFinite(hip) ? STELLARIUM_HIP_STAR_MAP.get(hip) : null;
+
+    if (pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) &&
+        Number.isFinite(pt.alt) && pt.onScreen) {
+        return {
+            x: pt.x,
+            y: pt.y,
+            onScreen: true,
+            z3d: 1
+        };
+    }
+
+    // Fallback for an anchor that is not represented by a currently projected
+    // catalogue/HIP point.
+    if (!pt) {
+        pt = anchor._star || (anchor._star = {
+            ra: Number(anchor[2]) * 15, // Stellarium metadata stores RA in hours.
+            dec: Number(anchor[3]),
+            _sinDec: Math.sin(Number(anchor[3]) * Math.PI / 180),
+            _cosDec: Math.cos(Number(anchor[3]) * Math.PI / 180)
+        });
+    }
+
+    if (astroPositionsFresh || pt._cValid === undefined) {
+        const pre = precessStarToDate(
+            pt.ra, pt.dec, astroTime,
+            pt.pmRa || 0, pt.pmDec || 0
+        );
+        const hor = Astronomy.Horizon(
+            astroTime, observer, pre.ra, pre.dec, dynamicRefraction
+        );
+        pt._cAlt = hor.altitude;
+        pt._cAz = hor.azimuth;
+        cacheENUFromAltAz(pt, hor.altitude, hor.azimuth);
+        pt._cValid = true;
+    }
+
+    if (!(pt._cAlt >= -8)) return null;
+    const proj = arMode
+        ? projectCachedSkyPoint(pt)
+        : projectAz(pt._cAlt, pt._cAz);
+
+    return proj && Number.isFinite(proj.x) && Number.isFinite(proj.y)
+        ? proj
+        : null;
+}
+
+// Solve the 2D affine transform that maps three image-space anchor points to
+// their current screen-space positions. This is the same three-anchor mechanism
+// used by Stellarium's sky-culture format.
+function solveArtAffine(src, dst) {
+    const [x1,y1]=src[0], [x2,y2]=src[1], [x3,y3]=src[2];
+    const [X1,Y1]=dst[0], [X2,Y2]=dst[1], [X3,Y3]=dst[2];
+    const den = x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2);
+    if (Math.abs(den) < 1e-7) return null;
+    const a = (X1*(y2-y3)+X2*(y3-y1)+X3*(y1-y2))/den;
+    const c = (X1*(x3-x2)+X2*(x1-x3)+X3*(x2-x1))/den;
+    const e = (X1 - a*x1 - c*y1);
+    const b = (Y1*(y2-y3)+Y2*(y3-y1)+Y3*(y1-y2))/den;
+    const d = (Y1*(x3-x2)+Y2*(x1-x3)+Y3*(x2-x1))/den;
+    const f = (Y1 - b*x1 - d*y1);
+    return {a,b,c,d,e,f};
+}
+
+// Some official Stellarium Western illustrations (notably Leo) contain only
+// two celestial anchors. Two points cannot define a general affine transform,
+// but they do define the intended translation + uniform scale + rotation.
+function solveArtSimilarity(src, dst) {
+    if (!src || !dst || src.length < 2 || dst.length < 2) return null;
+    const x1=src[0][0], y1=src[0][1], x2=src[1][0], y2=src[1][1];
+    const X1=dst[0][0], Y1=dst[0][1], X2=dst[1][0], Y2=dst[1][1];
+    const sx=x2-x1, sy=y2-y1, dx=X2-X1, dy=Y2-Y1;
+    const sl=Math.hypot(sx,sy), dl=Math.hypot(dx,dy);
+    if (sl < 1e-6 || dl < 1e-6) return null;
+    const scale=dl/sl;
+    const cos=(dx*sx+dy*sy)/(dl*sl);
+    const sin=(dy*sx-dx*sy)/(dl*sl);
+    const a=scale*cos, b=scale*sin, c=-scale*sin, d=scale*cos;
+    const e=X1-a*x1-c*y1, f=Y1-b*x1-d*y1;
+    return {a,b,c,d,e,f};
+}
+
+function drawStellariumConstellationArt(ctx, astroTime, observer, starDimFactor, w, h) {
+    if (constellationDisplayMode !== 2 || zoomLevel < 0.52 || !CONSTELLATION_ART.length) return;
+
+    const candidates = [];
+    for (const art of CONSTELLATION_ART) {
+        // The Western sky culture contains a small number of two-anchor figures.
+        // Keep them valid instead of letting an incomplete anchor list abort the
+        // entire sky render.
+        if (!art.anchors || art.anchors.length < 2) continue;
+        const dst = art.anchors.map(a => projectArtAnchor(a, astroTime, observer));
+        if (dst.some(p => !p)) continue;
+        const visibleCount = dst.filter(p => p.onScreen).length;
+        if (!visibleCount) continue;
+
+        const cx = dst.reduce((sum,p)=>sum+p.x,0) / dst.length;
+        const cy = dst.reduce((sum,p)=>sum+p.y,0) / dst.length;
+        const dist = Math.hypot(cx - w/2, cy - h/2);
+        candidates.push({art, dst, cx, cy, dist, visibleCount});
+    }
+
+    // Render only the nearest visible illustrations. This keeps ART mode cheap
+    // even when the user zooms far out and dozens of constellations are visible.
+    candidates.sort((a,b) => a.dist - b.dist);
+    const visible = candidates.slice(0, arMode ? Math.min(6, ART_MAX_VISIBLE) : ART_MAX_VISIBLE);
+
+    for (const c of visible) {
+        const art = c.art;
+        art._lastUsed = performance.now();
+        if (!art.loaded) {
+            ensureArtImage(art);
+            continue;
+        }
+
+        const src = art.anchors.map(a => [a[0], a[1]]);
+        const dst = c.dst.map(p => [p.x,p.y]);
+        const m = src.length >= 3 ? solveArtAffine(src, dst) : solveArtSimilarity(src, dst);
+        if (!m) continue;
+
+        const fovFade = Math.max(0.28, Math.min(1, (zoomLevel - 0.50) / 0.65));
+        const alpha = (arMode ? 0.10 : 0.075) * fovFade * Math.max(0.55, starDimFactor);
+        if (alpha <= 0.001) continue;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        ctx.globalAlpha = alpha;
+        ctx.imageSmoothingEnabled = true;
+        ctx.setTransform(m.a,m.b,m.c,m.d,m.e,m.f);
+        ctx.drawImage(art.image,0,0,art.size,art.size);
+        ctx.restore();
+    }
+}
+
 const FAINT_COLOR_BUCKETS = {
     blue:   { fill: 'rgba(170, 191, 255, 0.75)', stars: [] },
     white:  { fill: 'rgba(235, 240, 255, 0.80)', stars: [] },
@@ -2342,9 +2715,10 @@ function buildStarLodLists() {
             constellationNames.add(pair[1]);
         });
     }
-
     const make = maxMag => ALL_STARS.filter(star =>
-        star.mag <= maxMag || (star.name && constellationNames.has(star.name))
+        star.mag <= maxMag ||
+        star._stellariumLineStar ||
+        (star.name && constellationNames.has(star.name))
     );
 
     STAR_LOD_LISTS = {
@@ -2433,6 +2807,41 @@ function updateWebGLConstellationStarPositions(astroTime, observer) {
         const proj = projectAz(alt, az);
         if (!proj.onScreen) continue;
         star.x = proj.x; star.y = proj.y; star.onScreen = true;
+        star._stellariumPositionUpdated = true;
+    }
+
+    // Constellation lines have their own compact HIP-star set. Reuse cached
+    // alt/az between astronomical refreshes; only the screen projection changes
+    // during panning/zooming. This keeps the line layer inexpensive on phones.
+    const nowConstMs = performance.now();
+    const updateARConstellations = !arMode || !window.__starSightArConstellationLastUpdate || (nowConstMs - window.__starSightArConstellationLastUpdate >= 40);
+    if (constellationDisplayMode !== 0 && STELLARIUM_LINE_STARS.length && updateARConstellations) {
+        if (arMode) window.__starSightArConstellationLastUpdate = nowConstMs;
+        for (const star of STELLARIUM_LINE_STARS) {
+            if (star._stellariumPositionUpdated) {
+                star._stellariumPositionUpdated = false;
+                continue;
+            }
+            let alt = star._cAlt, az = star._cAz;
+            if (astroPositionsFresh || star._stellariumCValid === undefined) {
+                const ha = (lstDeg - star.ra) * Math.PI / 180;
+                const sinH = Math.sin(ha), cosH = Math.cos(ha);
+                const sinDec = star._sinDec, cosDec = star._cosDec;
+                const E = -cosDec * sinH;
+                const N = cosLat * sinDec - sinLat * cosDec * cosH;
+                const U = sinLat * sinDec + cosLat * cosDec * cosH;
+                alt = Math.asin(Math.max(-1, Math.min(1, U))) * rad2deg;
+                az = ((Math.atan2(E, N) * rad2deg) + 360) % 360;
+                star._cAlt = alt; star._cAz = az;
+                star._stellariumCValid = alt >= 0;
+            }
+            star.onScreen = false;
+            if (!(alt >= 0)) continue;
+            star.alt = alt; star.az = az;
+            const proj = projectAz(alt, az);
+            if (!proj.onScreen) continue;
+            star.x = proj.x; star.y = proj.y; star.onScreen = true;
+        }
     }
 }
 
@@ -2790,6 +3199,17 @@ function drawMap() {
 
     try {
     updateProjectionBasis();
+
+    // AR must never present the synthetic pre-sensor orientation. On some phones
+    // the first deviceorientation event arrives a few frames after Camera AR opens;
+    // rendering those frames used to show South and then snap to North on the first
+    // drag. Hold the celestial overlay until a real pose has been calibrated.
+    if (arMode && arTrackingActive && !arPoseReady) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(drawMap);
+        return;
+    }
+
     const nowMs = performance.now();
 
     // Single-source Timelapse clock. The simulation advances at the exact
@@ -2912,59 +3332,28 @@ function drawMap() {
 
     if (showHorizon) {
         if (arMode) {
-            const camSinAlt = R_matrix[8]; 
-            
-            if (camSinAlt > -0.7) {
-                if (camSinAlt > 0.9) {
-                    ctx.fillStyle = cameraActive ? 'rgba(0,0,0,0.7)' : '#010205';
-                    ctx.fillRect(-w, -h, w*3, h*3);
-                } else {
-                    let centerAz = syntheticAzimuth;
-                    if (arTrackingActive && smoothAlpha !== null) {
-                        centerAz = ((360 - smoothAlpha + 180) % 360 + 360) % 360;
-                    }
-
-                    const horizonPoints = [];
-                    for(let a = centerAz - 85; a <= centerAz + 85; a += 2) {
-                        let az = (a % 360 + 360) % 360;
-                        const p = projectAz(0, az);
-                        if (p.z3d > 0.01) {
-                            horizonPoints.push(p);
-                        }
-                    }
-
-                    if (horizonPoints.length > 0) {
-                        const focalLength = Math.max(w, h) * 0.85 * arZoomLevel;
-                        const gx = -R_matrix[6];
-                        const gy = -R_matrix[7];
-                        const O = screenOrientation * Math.PI / 180;
-                        const downX = gx * Math.cos(O) + gy * Math.sin(O);
-                        const downY = -(-gx * Math.sin(O) + gy * Math.cos(O));
-                        
-                        const mag = Math.sqrt(downX*downX + downY*downY) || 1;
-                        const ndx = (downX / mag) * 10000; 
-                        const ndy = (downY / mag) * 10000;
-
-                        ctx.fillStyle = cameraActive ? 'rgba(0,0,0,0.7)' : '#010205';
-                        ctx.beginPath();
-                        ctx.moveTo(horizonPoints[0].x, horizonPoints[0].y);
-                        for (let i = 1; i < horizonPoints.length; i++) {
-                            ctx.lineTo(horizonPoints[i].x, horizonPoints[i].y);
-                        }
-                        ctx.lineTo(horizonPoints[horizonPoints.length-1].x + ndx, horizonPoints[horizonPoints.length-1].y + ndy);
-                        ctx.lineTo(horizonPoints[0].x + ndx, horizonPoints[0].y + ndy);
-                        ctx.fill();
-                        
-                        ctx.lineWidth = 2.5;
-                        ctx.strokeStyle = cameraActive ? 'rgba(201,169,110,0.6)' : 'rgba(100, 150, 255, 0.9)';
-                        ctx.beginPath();
-                        ctx.moveTo(horizonPoints[0].x, horizonPoints[0].y);
-                        for (let i = 1; i < horizonPoints.length; i++) {
-                            ctx.lineTo(horizonPoints[i].x, horizonPoints[i].y);
-                        }
-                        ctx.stroke();
-                    }
-                }
+            // AR is now a transparent 360° sky. The old opaque black ground
+            // plane has been removed; only a lightweight horizon indicator is drawn.
+            const centerAz = (arTrackingActive && smoothAlpha !== null)
+                ? ((360 - smoothAlpha) % 360 + 360) % 360
+                : syntheticAzimuth;
+            const horizonPoints = [];
+            for (let a = centerAz - 90; a <= centerAz + 90; a += 2) {
+                const az = (a % 360 + 360) % 360;
+                const p = projectAz(0, az);
+                if (p.z3d > 0.01) horizonPoints.push(p);
+            }
+            if (horizonPoints.length > 1) {
+                ctx.save();
+                ctx.lineWidth = cameraActive ? 1.5 : 2;
+                ctx.strokeStyle = cameraActive ? 'rgba(255,255,255,0.55)' : 'rgba(100,150,255,0.75)';
+                ctx.shadowColor = cameraActive ? 'rgba(255,255,255,0.18)' : 'rgba(100,150,255,0.18)';
+                ctx.shadowBlur = 5;
+                ctx.beginPath();
+                ctx.moveTo(horizonPoints[0].x, horizonPoints[0].y);
+                for (let i = 1; i < horizonPoints.length; i++) ctx.lineTo(horizonPoints[i].x, horizonPoints[i].y);
+                ctx.stroke();
+                ctx.restore();
             }
 
             ctx.fillStyle = cameraActive ? 'rgba(201,169,110,0.8)' : 'rgba(100, 150, 255, 0.9)';
@@ -2989,7 +3378,7 @@ function drawMap() {
             ctx.textAlign = 'center';
             const dirs = [ {label:'N', az:0}, {label:'E', az:90}, {label:'S', az:180}, {label:'W', az:270} ];
             dirs.forEach(d => {
-                const angleRad = (d.az - 180 + rotateOffset) * Math.PI / 180;
+                const angleRad = (d.az + rotateOffset) * Math.PI / 180;
                 const dx = cx + (r + 14) * Math.sin(angleRad);
                 const dy = cy - (r + 14) * Math.cos(angleRad);
                 ctx.fillText(d.label, dx, dy + 3);
@@ -3345,33 +3734,40 @@ function drawMap() {
     ctx.globalCompositeOperation = 'source-over';
     ctx.filter = 'none';
     renderOptimizedStars(ctx, astroTime, observer, starDimFactor, w, h);
+    drawStellariumConstellationArt(ctx, astroTime, observer, starDimFactor, w, h);
 
-    // Draw constellation lines only after the current frame's star positions have
-    // been calculated. Drawing them before renderOptimizedStars() can reuse stale
-    // x/y coordinates from a previous frame and create long, spurious lines.
+    // Draw the Stellarium Western stick figures after star positions are current.
+    // Each path is a polyline of HIP-linked stars, so the lines and Meuris artwork
+    // are anchored to the same astronomical stars.
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    if (showConstellations) {
-        let constAlpha = arMode ? 0.45 : (0.12 * starDimFactor);
+    if (showConstellations && STELLARIUM_CONSTELLATION_PATHS.length) {
+        // Keep the full Western stick-figure network, but let it recede strongly
+        // when the sky is zoomed out. This prevents hundreds of distant segments
+        // from visually dominating the star field.
+        const z = arMode ? 1 : visualZoomLevel;
+        const normalAlpha = z < 0.62 ? 0.045 : z < 0.82 ? 0.060 : z < 1.05 ? 0.078 : z < 1.35 ? 0.100 : 0.125;
+        const constAlpha = arMode ? 0.28 : (normalAlpha * starDimFactor);
         ctx.strokeStyle = `rgba(201,169,110,${constAlpha})`;
-        ctx.lineWidth = arMode ? 1.5 : 0.8;
-        CONSTELLATION_LINES.forEach(([n1, n2]) => {
-            const s1 = STAR_NAME_INDEX.get(n1);
-            const s2 = STAR_NAME_INDEX.get(n2);
-            if (!s1 || !s2) return;
-            if (
-                s1.alt >= 0.0 && s2.alt >= 0.0 &&
-                s1.onScreen && s2.onScreen &&
-                Number.isFinite(s1.x) && Number.isFinite(s1.y) &&
-                Number.isFinite(s2.x) && Number.isFinite(s2.y) &&
-                (!arMode || (s1.z3d > 0.01 && s2.z3d > 0.01))
-            ) {
+        ctx.lineWidth = arMode ? 1.0 : (z < 0.82 ? 0.48 : z < 1.2 ? 0.62 : 0.76);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        for (const con of STELLARIUM_CONSTELLATION_PATHS) {
+            for (const path of con.paths) {
+                if (path.length < 2) continue;
                 ctx.beginPath();
-                ctx.moveTo(s1.x, s1.y);
-                ctx.lineTo(s2.x, s2.y);
+                let started = false;
+                for (const star of path) {
+                    if (!star.onScreen || !Number.isFinite(star.x) || !Number.isFinite(star.y) || star.alt < 0) {
+                        started = false;
+                        continue;
+                    }
+                    if (!started) { ctx.moveTo(star.x, star.y); started = true; }
+                    else ctx.lineTo(star.x, star.y);
+                }
                 ctx.stroke();
             }
-        });
+        }
     }
 
     planetPositions.forEach(p => {
@@ -3953,7 +4349,7 @@ canvas.addEventListener('wheel', e => {
         if (arTrackingActive) {
             arTrackingActive = false;
             document.getElementById('btnRecenter').style.display = 'block';
-            syntheticAzimuth = ((360 - smoothAlpha + 180) % 360 + 360) % 360;
+            syntheticAzimuth = ((360 - smoothAlpha) % 360 + 360) % 360;
             syntheticAltitude = smoothBeta - 90;
         }
         arZoomLevel = Math.max(1.0, Math.min(8.0, arZoomLevel * delta));
@@ -4159,8 +4555,25 @@ function showSkyToolStatus(message) {
     skyToolStatusTimer = setTimeout(() => el.classList.remove('visible'), 1100);
 }
 
+function syncArConstellationButton() {
+    const arBtn = document.getElementById('arConstellationToggle');
+    if (!arBtn) return;
+    const label = constellationDisplayMode === 2 ? 'Constellation artwork' : (constellationDisplayMode === 1 ? 'Constellation lines' : 'Constellations off');
+    arBtn.title = label;
+    arBtn.setAttribute('aria-label', label);
+    const icon = arBtn.querySelector('.ar-constellation-icon');
+    if (icon) icon.textContent = constellationDisplayMode === 2 ? '✦' : (constellationDisplayMode === 1 ? '☆' : '·');
+    arBtn.classList.toggle('active', constellationDisplayMode !== 0);
+}
+
 function syncSkyToolStates() {
-    setSkyToolActive('constellations', showConstellations);
+    setSkyToolActive('constellations', constellationDisplayMode !== 0);
+    syncArConstellationButton();
+    const cb = document.querySelector('.sky-tool-icon[data-tool="constellations"]');
+    if (cb) {
+        const span = cb.querySelector('span');
+        if (span) span.textContent = constellationDisplayMode === 2 ? '✦' : (constellationDisplayMode === 1 ? '☆' : '·');
+    }
     setSkyToolActive('grid', showGrid);
     setSkyToolActive('horizon', showHorizon);
     setSkyToolActive('rotate', rotateMode);
@@ -4169,9 +4582,18 @@ function syncSkyToolStates() {
 }
 
 function toggleConstellations() {
-    showConstellations = !showConstellations;
+    constellationDisplayMode = (constellationDisplayMode + 1) % 3;
+    showConstellations = constellationDisplayMode !== 0;
     setSkyToolActive('constellations', showConstellations);
-    showSkyToolStatus(`CONSTELLATIONS ${showConstellations ? 'ON' : 'OFF'}`);
+    const cb = document.querySelector('.sky-tool-icon[data-tool="constellations"]');
+    if (cb) {
+        const span = cb.querySelector('span');
+        if (span) span.textContent = constellationDisplayMode === 2 ? '✦' : (constellationDisplayMode === 1 ? '☆' : '·');
+        cb.title = constellationDisplayMode === 2 ? 'Constellation artwork' : (constellationDisplayMode === 1 ? 'Constellation lines' : 'Constellations off');
+        cb.setAttribute('aria-label', cb.title);
+    }
+    syncArConstellationButton();
+    showSkyToolStatus(constellationDisplayMode === 1 ? 'CONSTELLATIONS ON' : (constellationDisplayMode === 2 ? 'CONSTELLATION ART ON' : 'CONSTELLATIONS OFF'));
     drawMap();
 }
 function toggleGrid() {

@@ -1,2 +1,1 @@
-StarSight v31.2 — Compass UI + dependency/cache fix
-Built from the working v31.1 WebGL architecture. Includes all required scripts and service worker.
+31.8.6

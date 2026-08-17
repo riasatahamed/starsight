@@ -1,0 +1,10 @@
+StarSight v31.8.6
+
+Artwork stability fix:
+- Constellation artwork anchors now reuse the exact projected x/y positions of
+  their matched HIP/star objects whenever available.
+- This prevents a second independent RA/Dec -> Alt/Az calculation from drifting
+  relative to the WebGL star renderer.
+- The fallback astronomical projection remains only for anchors that cannot be
+  matched to a currently projected HIP/star object.
+- AR constellation rendering remains disabled for performance.

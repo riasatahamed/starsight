@@ -1,0 +1,6 @@
+StarSight v31.8.6
+- Normal sky map initializes showConstellations=false.
+- constellationDisplayMode=0 (Off).
+- preArConstellationDisplayMode=0.
+- This fixes the first-load mismatch where the UI showed Off while legacy rendering state still enabled lines.
+- AR remains constellation-free for performance.
