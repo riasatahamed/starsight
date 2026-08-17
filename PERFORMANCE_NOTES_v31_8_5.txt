@@ -1,4 +1,4 @@
-StarSight v31.8.6
+StarSight v31.8.8
 
 - Normal sky map constellation layer defaults to OFF for a clean first view.
 - The user can still enable constellation Lines/Artwork with the existing control.

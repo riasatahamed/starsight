@@ -516,7 +516,7 @@ let smoothBeta = null;
 let smoothGamma = null;
 const SMOOTH_K = 0.12; 
 let syntheticAzimuth = 0; 
-// AR PERFORMANCE POLICY (v31.8.6):
+// AR PERFORMANCE POLICY (v31.8.8):
 // Constellation lines/artwork are intentionally disabled in AR.
 // The main sky map retains the full constellation system.
 function disableARConstellationsForPerformance() {
@@ -1070,8 +1070,7 @@ function toggleAR() {
         preArConstellationDisplayMode = constellationDisplayMode;
         constellationDisplayMode = 0;
         showConstellations = false;
-        syncArConstellationButton();
-        document.body.classList.add('ar-active');
+            document.body.classList.add('ar-active');
         if (!panel.classList.contains('fullscreen-mode')) {
             panel.classList.add('fullscreen-mode');
             document.body.classList.add('fullscreen-active');
@@ -2468,11 +2467,8 @@ function initStellariumConstellationLayer() {
         abbr, paths: paths.map(path => path.map(i => matched[i]).filter(Boolean))
     }));
 
-    // Synthetic line-only stars must participate in Canvas rendering and WebGL's
-    // screen-position bookkeeping, but are not uploaded as duplicate star pixels.
-    for (const star of matched) {
-        if (star._stellariumSynthetic && !ALL_STARS.includes(star)) ALL_STARS.push(star);
-    }
+    // Synthetic HIP points are geometry-only anchors. Never add them to ALL_STARS:
+    // doing so creates duplicate star sprites and can make bright stars appear to vibrate.
 
     console.log(`✨ Stellarium Western constellation layer: ${STELLARIUM_CONSTELLATION_PATHS.length} constellations / ${STELLARIUM_LINE_STARS.length} HIP stars.`);
 }
@@ -2623,17 +2619,20 @@ function solveArtSimilarity(src, dst) {
     return {a,b,c,d,e,f};
 }
 
+
 function drawStellariumConstellationArt(ctx, astroTime, observer, starDimFactor, w, h) {
     if (constellationDisplayMode !== 2 || zoomLevel < 0.52 || !CONSTELLATION_ART.length) return;
 
     const candidates = [];
     for (const art of CONSTELLATION_ART) {
-        // The Western sky culture contains a small number of two-anchor figures.
-        // Keep them valid instead of letting an incomplete anchor list abort the
-        // entire sky render.
         if (!art.anchors || art.anchors.length < 2) continue;
+
+        // Use the exact current screen-space coordinates of the HIP anchor stars.
+        // This is deliberately a single projection path: no second celestial
+        // mesh calculation, which avoids sub-pixel drift/vibration.
         const dst = art.anchors.map(a => projectArtAnchor(a, astroTime, observer));
         if (dst.some(p => !p)) continue;
+
         const visibleCount = dst.filter(p => p.onScreen).length;
         if (!visibleCount) continue;
 
@@ -2643,34 +2642,46 @@ function drawStellariumConstellationArt(ctx, astroTime, observer, starDimFactor,
         candidates.push({art, dst, cx, cy, dist, visibleCount});
     }
 
-    // Render only the nearest visible illustrations. This keeps ART mode cheap
-    // even when the user zooms far out and dozens of constellations are visible.
     candidates.sort((a,b) => a.dist - b.dist);
-    const visible = candidates.slice(0, arMode ? Math.min(6, ART_MAX_VISIBLE) : ART_MAX_VISIBLE);
+
+    // Keep the mobile layer deliberately small.
+    const visible = candidates.slice(
+        0,
+        isMobileDeviceCheck() ? 3 : ART_MAX_VISIBLE
+    );
 
     for (const c of visible) {
         const art = c.art;
         art._lastUsed = performance.now();
+
         if (!art.loaded) {
             ensureArtImage(art);
             continue;
         }
 
-        const src = art.anchors.map(a => [a[0], a[1]]);
-        const dst = c.dst.map(p => [p.x,p.y]);
-        const m = src.length >= 3 ? solveArtAffine(src, dst) : solveArtSimilarity(src, dst);
+        const src = art.anchors.map(a => [Number(a[0]), Number(a[1])]);
+        const dst = c.dst.map(p => [p.x, p.y]);
+
+        // Three anchors: affine registration.
+        // Two anchors: similarity transform (scale + rotation + translation).
+        const m = src.length >= 3
+            ? solveArtAffine(src, dst)
+            : solveArtSimilarity(src, dst);
+
         if (!m) continue;
 
-        const fovFade = Math.max(0.28, Math.min(1, (zoomLevel - 0.50) / 0.65));
-        const alpha = (arMode ? 0.10 : 0.075) * fovFade * Math.max(0.55, starDimFactor);
-        if (alpha <= 0.001) continue;
+        const fovFade = Math.max(
+            0.28,
+            Math.min(1, (zoomLevel - 0.50) / 0.65)
+        );
+        const alpha = 0.075 * fovFade * Math.max(0.55, starDimFactor);
 
         ctx.save();
         ctx.globalCompositeOperation = 'screen';
         ctx.globalAlpha = alpha;
         ctx.imageSmoothingEnabled = true;
-        ctx.setTransform(m.a,m.b,m.c,m.d,m.e,m.f);
-        ctx.drawImage(art.image,0,0,art.size,art.size);
+        ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
+        ctx.drawImage(art.image, 0, 0, art.size, art.size);
         ctx.restore();
     }
 }
@@ -2715,11 +2726,11 @@ function buildStarLodLists() {
             constellationNames.add(pair[1]);
         });
     }
-    const make = maxMag => ALL_STARS.filter(star =>
+    const make = maxMag => ALL_STARS.filter(star => !star._stellariumSynthetic && (
         star.mag <= maxMag ||
         star._stellariumLineStar ||
         (star.name && constellationNames.has(star.name))
-    );
+    ));
 
     STAR_LOD_LISTS = {
         mDrag: STAR_LOD_MAG.mobileDrag.map(make),
@@ -3741,7 +3752,7 @@ function drawMap() {
     // are anchored to the same astronomical stars.
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    if (showConstellations && STELLARIUM_CONSTELLATION_PATHS.length) {
+    if (showConstellations && constellationDisplayMode === 1 && STELLARIUM_CONSTELLATION_PATHS.length) {
         // Keep the full Western stick-figure network, but let it recede strongly
         // when the sky is zoomed out. This prevents hundreds of distant segments
         // from visually dominating the star field.
@@ -3762,8 +3773,10 @@ function drawMap() {
                         started = false;
                         continue;
                     }
-                    if (!started) { ctx.moveTo(star.x, star.y); started = true; }
-                    else ctx.lineTo(star.x, star.y);
+                    const lx = Math.round(star.x * 4) / 4;
+                    const ly = Math.round(star.y * 4) / 4;
+                    if (!started) { ctx.moveTo(lx, ly); started = true; }
+                    else ctx.lineTo(lx, ly);
                 }
                 ctx.stroke();
             }
@@ -4555,20 +4568,8 @@ function showSkyToolStatus(message) {
     skyToolStatusTimer = setTimeout(() => el.classList.remove('visible'), 1100);
 }
 
-function syncArConstellationButton() {
-    const arBtn = document.getElementById('arConstellationToggle');
-    if (!arBtn) return;
-    const label = constellationDisplayMode === 2 ? 'Constellation artwork' : (constellationDisplayMode === 1 ? 'Constellation lines' : 'Constellations off');
-    arBtn.title = label;
-    arBtn.setAttribute('aria-label', label);
-    const icon = arBtn.querySelector('.ar-constellation-icon');
-    if (icon) icon.textContent = constellationDisplayMode === 2 ? '✦' : (constellationDisplayMode === 1 ? '☆' : '·');
-    arBtn.classList.toggle('active', constellationDisplayMode !== 0);
-}
-
 function syncSkyToolStates() {
     setSkyToolActive('constellations', constellationDisplayMode !== 0);
-    syncArConstellationButton();
     const cb = document.querySelector('.sky-tool-icon[data-tool="constellations"]');
     if (cb) {
         const span = cb.querySelector('span');
@@ -4592,7 +4593,6 @@ function toggleConstellations() {
         cb.title = constellationDisplayMode === 2 ? 'Constellation artwork' : (constellationDisplayMode === 1 ? 'Constellation lines' : 'Constellations off');
         cb.setAttribute('aria-label', cb.title);
     }
-    syncArConstellationButton();
     showSkyToolStatus(constellationDisplayMode === 1 ? 'CONSTELLATIONS ON' : (constellationDisplayMode === 2 ? 'CONSTELLATION ART ON' : 'CONSTELLATIONS OFF'));
     drawMap();
 }

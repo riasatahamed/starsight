@@ -1744,31 +1744,5 @@ body.ar-active #starWebGLCanvas { display:none !important; }
 
 }
 
-/* v31.8.1 — AR constellation control. Kept in the opposite top corner from
-   the Back button and away from the bottom camera/recenter controls. */
-#arConstellationToggle {
-  position:absolute;
-  top:calc(72px + env(safe-area-inset-top,0px));
-  left:calc(14px + env(safe-area-inset-left,0px));
-  width:46px; height:46px;
-  display:flex; align-items:center; justify-content:center;
-  border:1px solid rgba(255,255,255,.20);
-  border-radius:50%;
-  background:rgba(5,8,14,.48);
-  color:rgba(255,255,255,.78);
-  font:600 20px/1 'Space Grotesk',sans-serif;
-  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-  box-shadow:0 8px 28px rgba(0,0,0,.24);
-  pointer-events:auto; cursor:pointer; z-index:12;
-  transition:background .2s ease,border-color .2s ease,transform .2s ease,color .2s ease;
-}
-#arConstellationToggle.active {
-  background:rgba(28,34,48,.68);
-  border-color:rgba(201,169,110,.42);
-  color:rgba(255,238,196,.95);
-}
-#arConstellationToggle:active { transform:scale(.94); }
-#arConstellationToggle .ar-constellation-icon { display:block; transform:translateY(-1px); }
-@media(max-width:380px){
-  #arConstellationToggle { width:42px; height:42px; top:calc(66px + env(safe-area-inset-top,0px)); left:calc(10px + env(safe-area-inset-left,0px)); }
-}
+/* v31.8.8: AR constellation UI intentionally removed. */
+#arConstellationToggle{display:none!important}

@@ -1,4 +1,4 @@
-StarSight v31.8.6
+StarSight v31.8.8
 AR performance policy:
 - Constellation lines and artwork are disabled in AR.
 - Main sky map retains constellation lines and Stellarium artwork.

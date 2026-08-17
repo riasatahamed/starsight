@@ -1,0 +1,6 @@
+StarSight v31.8.8
+- Constellation artwork now uses a small celestial-space mesh warp from the Stellarium anchor stars, so figures remain registered during zoom/pan instead of using one screen-space affine transform.
+- Synthetic Stellarium HIP helper stars are geometry-only and are never added to ALL_STARS, preventing duplicate visible stars/vibration.
+- AR constellation button removed from HTML/CSS/behavior; AR remains constellation-free for performance.
+- Mobile SPA navigation hardened with pointer/touch handling and explicit page navigation fallback.
+- Mobile navigation layer is above its backdrop.

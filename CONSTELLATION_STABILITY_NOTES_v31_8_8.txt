@@ -1,0 +1,11 @@
+StarSight v31.8.8
+
+Stability rollback:
+- Removed the experimental celestial mesh artwork warp.
+- Restored the stable three-anchor screen-space affine registration.
+- Two-anchor artwork uses similarity registration.
+- Artwork mode no longer draws the constellation line network underneath it.
+- Constellation line vertices are quarter-pixel snapped to reduce Canvas antialiasing shimmer.
+- Synthetic Stellarium helper stars are excluded from the visible star LOD lists.
+- AR remains constellation-free for performance.
+- Normal sky map constellation default remains OFF.

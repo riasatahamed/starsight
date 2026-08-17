@@ -1,4 +1,4 @@
-StarSight v31.8.6
+StarSight v31.8.8
 - Normal sky map initializes showConstellations=false.
 - constellationDisplayMode=0 (Off).
 - preArConstellationDisplayMode=0.

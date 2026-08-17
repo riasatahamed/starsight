@@ -47,7 +47,6 @@
     <div id="arUiTime">UTC --:--</div>
     <div id="arUiDate">--</div>
   </div>
-  <button id="arConstellationToggle" class="ar-constellation-toggle active" type="button" onclick="toggleConstellations()" aria-label="Constellation lines" title="Constellation lines"><span class="ar-constellation-icon">☆</span></button>
   <button id="arExitButton" type="button" onclick="exitAR()" aria-label="Exit AR view" title="Exit AR view">
     <svg fill="none" height="22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" viewbox="0 0 24 24" width="22"><path d="M15 18l-6-6 6-6"></path></svg>
     <span>Back</span>
@@ -102,14 +101,14 @@
 <div><div class="brand-name">Star<span>Sight</span></div><div class="brand-sub">PRECISION PLANETARIUM</div></div>
 </div>
 <nav aria-label="Primary navigation" class="main-nav" id="mainNav">
-<button class="nav-item active" data-page-target="sky">Sky</button>
-<button class="nav-item" data-page-target="explore">Explore</button>
-<button class="nav-item" data-page-target="conditions">Conditions</button>
-<button class="nav-item" data-page-target="live">Live</button>
-<button class="nav-item" data-page-target="journal">Journal</button>
-<button class="nav-item" data-page-target="apod">APOD</button>
-<button class="nav-item" data-page-target="advanced">Advanced</button>
-<button class="nav-item" data-page-target="about">Science</button></nav>
+<button class="nav-item active" data-page-target="sky" onclick="window.__starSightNavigate&&window.__starSightNavigate('sky');return false;">Sky</button>
+<button class="nav-item" data-page-target="explore" onclick="window.__starSightNavigate&&window.__starSightNavigate('explore');return false;">Explore</button>
+<button class="nav-item" data-page-target="conditions" onclick="window.__starSightNavigate&&window.__starSightNavigate('conditions');return false;">Conditions</button>
+<button class="nav-item" data-page-target="live" onclick="window.__starSightNavigate&&window.__starSightNavigate('live');return false;">Live</button>
+<button class="nav-item" data-page-target="journal" onclick="window.__starSightNavigate&&window.__starSightNavigate('journal');return false;">Journal</button>
+<button class="nav-item" data-page-target="apod" onclick="window.__starSightNavigate&&window.__starSightNavigate('apod');return false;">APOD</button>
+<button class="nav-item" data-page-target="advanced" onclick="window.__starSightNavigate&&window.__starSightNavigate('advanced');return false;">Advanced</button>
+<button class="nav-item" data-page-target="about" onclick="window.__starSightNavigate&&window.__starSightNavigate('about');return false;">Science</button></nav>
 <div class="topbar-actions">
 <button aria-label="Open menu" class="top-icon menu-toggle" id="menuToggle" title="Open menu">☰</button>
 </div>
@@ -322,8 +321,22 @@ function showPage(name,push=true){
   requestAnimationFrame(()=>requestAnimationFrame(()=>refresh(name)));
   armChrome();
 }
+window.__starSightNavigate = (name) => showPage(name, true);
 function syncLocation(){const s=document.getElementById('locName'),d=document.getElementById('skyLocationLabel');if(d&&s)d.textContent=s.textContent&&s.textContent!=='--'?s.textContent:'Detecting location…';}
-navItems.forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.pageTarget)));openLoc?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});document.getElementById('hudLocation')?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});closeLoc?.addEventListener('click',()=>drawer?.classList.remove('open'));menu?.addEventListener('click',()=>{nav?.classList.toggle('mobile-open');backdrop?.classList.toggle('visible');});backdrop?.addEventListener('click',()=>{nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');});window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'sky',false));document.addEventListener('keydown',e=>{if(e.key==='Escape'){drawer?.classList.remove('open');nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');}});
+navItems.forEach(b=>{
+  let lastPointer=0;
+  b.addEventListener('pointerup',e=>{
+    if(e.pointerType==='touch'||e.pointerType==='pen'){
+      lastPointer=Date.now();
+      e.preventDefault();
+      showPage(b.dataset.pageTarget);
+    }
+  },{passive:false});
+  b.addEventListener('click',e=>{
+    if(Date.now()-lastPointer<700){ e.preventDefault(); return; }
+    showPage(b.dataset.pageTarget);
+  });
+});openLoc?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});document.getElementById('hudLocation')?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});closeLoc?.addEventListener('click',()=>drawer?.classList.remove('open'));menu?.addEventListener('click',()=>{nav?.classList.toggle('mobile-open');backdrop?.classList.toggle('visible');});backdrop?.addEventListener('click',()=>{nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');});window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'sky',false));document.addEventListener('keydown',e=>{if(e.key==='Escape'){drawer?.classList.remove('open');nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');}});
 function recover(){const p=document.querySelector('.app-page.active');if(!visible(p))showPage(location.hash.slice(1)||current||'sky',false);else refresh(current);syncLocation();}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(recover,80);});window.addEventListener('pageshow',()=>setTimeout(recover,80));window.addEventListener('focus',()=>setTimeout(recover,80));setInterval(()=>{if(!document.hidden)recover();},15000);setInterval(syncLocation,1000);syncLocation();['pointermove','pointerdown','wheel','touchstart'].forEach(ev=>document.addEventListener(ev,armChrome,{passive:true}));showPage(location.hash.slice(1)||'sky',false);
 })();
