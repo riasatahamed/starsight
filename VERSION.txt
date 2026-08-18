@@ -1,1 +1,5 @@
-31.8.8
+StarSight v32 — True 3D Celestial Hemisphere
+Based on the user-uploaded stable v31.2 codebase.
+Changed: main.js, webgl-star-renderer.js, index.html, style.css, sw.js.
+Unchanged stable files remain in the user's existing repository.
+Default view: zenith-centered, South-Up.

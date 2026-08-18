@@ -22,6 +22,3 @@ Timelapse frame pacing:
 
 No changes were made to the star catalogue, Milky Way density, AR behavior,
 normal sky-map rendering logic, visual styling, controls, or Timelapse speed.
-
-
-31.8.8: AR constellation display is OFF by default and restores the normal sky setting on exit. HIP-linked constellation projection is throttled to 25 FPS when enabled. Artwork anchors now use HIP-linked stars and correctly convert Stellarium RA-hours to degrees; AR artwork is capped at 6 visible figures.

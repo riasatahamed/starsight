@@ -1729,20 +1729,10 @@ body.ar-active #starWebGLCanvas { display:none !important; }
   .page-sky .map-footer #skyTime { bottom:1px !important; }
 }
 
-/* v31.3 clean constellation artwork state */
-.sky-tool-icon[data-tool="constellations"] { transition: opacity .25s ease, background .25s ease, border-color .25s ease, transform .25s ease; }
-.sky-tool-icon[data-tool="constellations"].active { text-shadow: 0 0 12px rgba(190,215,255,.18); }
-
-/* ===== v31.6 NORTH-UP ORIENTATION =====
-   The normal 2D sky map is now North-Up. Legacy South-Up selectors are intentionally
-   overridden so older cached/style blocks cannot invert the compass labels. */
-.sky-compass .compass-labels .n { top: 12px !important; bottom:auto !important; left:50% !important; right:auto !important; }
-.sky-compass .compass-labels .s { top:calc(100% - 11px) !important; bottom:auto !important; left:50% !important; right:auto !important; }
-.sky-compass .compass-labels .e { top:50% !important; left:calc(100% - 11px) !important; right:auto !important; }
-.sky-compass .compass-labels .w { top:50% !important; left:11px !important; right:auto !important; }
-
-
+/* StarSight v32 — 3D celestial hemisphere interaction */
+#starCanvas, #starWebGLCanvas {
+    touch-action: none;
 }
-
-/* v31.8.8: AR constellation UI intentionally removed. */
-#arConstellationToggle{display:none!important}
+body.fullscreen-active .panel-map {
+    perspective: none;
+}

@@ -14,28 +14,28 @@
 <!-- Open Graph -->
 <meta content="StarSight" property="og:title"/>
 <meta content="A precise telescope navigation and astronomy companion." property="og:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=317" property="og:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=320" property="og:image"/>
 <meta content="https://riasatahamed.github.io/starsight/" property="og:url"/>
 <meta content="website" property="og:type"/>
 <!-- Twitter / X -->
 <meta content="summary_large_image" name="twitter:card"/>
 <meta content="StarSight" name="twitter:title"/>
 <meta content="A precise telescope navigation and astronomy companion." name="twitter:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=317" name="twitter:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=320" name="twitter:image"/>
 <!-- Favicon -->
-<link href="images/StarSight_Logo.png?v=317" rel="icon" type="image/png"/>
+<link href="images/StarSight_Logo.png?v=320" rel="icon" type="image/png"/>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
 <!-- LINK TO YOUR NEW CSS FILE -->
-<link href="style.css?v=317" rel="stylesheet"/>
+<link href="style.css?v=320" rel="stylesheet"/>
 <!-- PWA & Mobile Meta -->
-<link href="manifest.json?v=317" rel="manifest"/>
+<link href="manifest.json?v=320" rel="manifest"/>
 <meta content="#05060a" name="theme-color"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="StarSight" name="apple-mobile-web-app-title"/>
-<link href="images/StarSight_Logo.png?v=317" rel="apple-touch-icon"/>
+<link href="images/StarSight_Logo.png?v=320" rel="apple-touch-icon"/>
 </head>
 <body>
 <div class="fixed-bg"></div>
@@ -59,6 +59,7 @@
 </div>
 </div>
 <div id="arOverlayMsg" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(10, 10, 15, 0.8); backdrop-filter:blur(20px); color:white; padding:20px 30px; border-radius:20px; border:1px solid rgba(255,255,255,0.2); z-index:1000000; text-align:center; font-weight:500; box-shadow:0 20px 40px rgba(0,0,0,0.5);"></div>
+<div id="arWarning" style="display:none; position:fixed; bottom:150px; left:50%; transform:translateX(-50%); background:var(--danger); color:#fff; padding:14px 28px; border-radius:30px; z-index:1000000; font-weight:600; box-shadow:0 8px 32px rgba(255, 75, 75, 0.4);">Please point the camera towards the sky</div>
 <div class="bg-stars" id="bgStars"></div>
 <div class="star-tooltip" id="starTooltip">
 <div class="tt-name" id="ttName"></div>
@@ -101,14 +102,14 @@
 <div><div class="brand-name">Star<span>Sight</span></div><div class="brand-sub">PRECISION PLANETARIUM</div></div>
 </div>
 <nav aria-label="Primary navigation" class="main-nav" id="mainNav">
-<button class="nav-item active" data-page-target="sky" onclick="window.__starSightNavigate&&window.__starSightNavigate('sky');return false;">Sky</button>
-<button class="nav-item" data-page-target="explore" onclick="window.__starSightNavigate&&window.__starSightNavigate('explore');return false;">Explore</button>
-<button class="nav-item" data-page-target="conditions" onclick="window.__starSightNavigate&&window.__starSightNavigate('conditions');return false;">Conditions</button>
-<button class="nav-item" data-page-target="live" onclick="window.__starSightNavigate&&window.__starSightNavigate('live');return false;">Live</button>
-<button class="nav-item" data-page-target="journal" onclick="window.__starSightNavigate&&window.__starSightNavigate('journal');return false;">Journal</button>
-<button class="nav-item" data-page-target="apod" onclick="window.__starSightNavigate&&window.__starSightNavigate('apod');return false;">APOD</button>
-<button class="nav-item" data-page-target="advanced" onclick="window.__starSightNavigate&&window.__starSightNavigate('advanced');return false;">Advanced</button>
-<button class="nav-item" data-page-target="about" onclick="window.__starSightNavigate&&window.__starSightNavigate('about');return false;">Science</button></nav>
+<button class="nav-item active" data-page-target="sky">Sky</button>
+<button class="nav-item" data-page-target="explore">Explore</button>
+<button class="nav-item" data-page-target="conditions">Conditions</button>
+<button class="nav-item" data-page-target="live">Live</button>
+<button class="nav-item" data-page-target="journal">Journal</button>
+<button class="nav-item" data-page-target="apod">APOD</button>
+<button class="nav-item" data-page-target="advanced">Advanced</button>
+<button class="nav-item" data-page-target="about">Science</button></nav>
 <div class="topbar-actions">
 <button aria-label="Open menu" class="top-icon menu-toggle" id="menuToggle" title="Open menu">☰</button>
 </div>
@@ -149,7 +150,7 @@
 <span>AR</span>
 </button>
 <!-- NEW COMPASS UI -->
-<button class="sky-compass" id="skyCompass" type="button" aria-label="Align sky to phone compass" title="Tap to align sky with your phone direction">
+<button class="sky-compass south-up" id="skyCompass" type="button" aria-label="Align sky to phone compass" title="Tap to align sky with your phone direction">
 <div class="compass-dial"></div>
 <div class="compass-labels">
 <span class="n">N</span><span class="e">E</span><span class="s">S</span><span class="w">W</span>
@@ -273,22 +274,20 @@
 
 <!-- LINK TO YOUR NEW JS FILE -->
 <!-- Data must load first -->
-<script src="data.js?v=317"></script>
-<script src="expanded_stars.js?v=317"></script>
+<script src="data.js?v=320"></script>
+<script src="expanded_stars.js?v=320"></script>
 <!-- Standalone features -->
-<script src="telescope.js?v=317"></script>
-<script src="observingLog.js?v=317"></script>
-<script src="api.js?v=317"></script>
+<script src="telescope.js?v=320"></script>
+<script src="observingLog.js?v=320"></script>
+<script src="api.js?v=320"></script>
 <!-- Main logic loads last to kick everything off -->
-<script src="webgl-star-renderer.js?v=317"></script>
-<script src="stellarium_art_manifest.js?v=3181"></script>
-<script src="stellarium_constellation_data.js?v=3181"></script>
-<script src="main.js?v=318"></script>
+<script src="webgl-star-renderer.js?v=320"></script>
+<script src="main.js?v=320"></script>
 <!-- Service Worker Registration -->
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js?v=317', { updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=320', { updateViaCache: 'none' })
                 .then(reg => {
                     console.log('StarSight Service Worker registered:', reg.scope);
                     // Ask the browser to check for a newer worker on each app load.
@@ -321,22 +320,8 @@ function showPage(name,push=true){
   requestAnimationFrame(()=>requestAnimationFrame(()=>refresh(name)));
   armChrome();
 }
-window.__starSightNavigate = (name) => showPage(name, true);
 function syncLocation(){const s=document.getElementById('locName'),d=document.getElementById('skyLocationLabel');if(d&&s)d.textContent=s.textContent&&s.textContent!=='--'?s.textContent:'Detecting location…';}
-navItems.forEach(b=>{
-  let lastPointer=0;
-  b.addEventListener('pointerup',e=>{
-    if(e.pointerType==='touch'||e.pointerType==='pen'){
-      lastPointer=Date.now();
-      e.preventDefault();
-      showPage(b.dataset.pageTarget);
-    }
-  },{passive:false});
-  b.addEventListener('click',e=>{
-    if(Date.now()-lastPointer<700){ e.preventDefault(); return; }
-    showPage(b.dataset.pageTarget);
-  });
-});openLoc?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});document.getElementById('hudLocation')?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});closeLoc?.addEventListener('click',()=>drawer?.classList.remove('open'));menu?.addEventListener('click',()=>{nav?.classList.toggle('mobile-open');backdrop?.classList.toggle('visible');});backdrop?.addEventListener('click',()=>{nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');});window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'sky',false));document.addEventListener('keydown',e=>{if(e.key==='Escape'){drawer?.classList.remove('open');nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');}});
+navItems.forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.pageTarget)));openLoc?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});document.getElementById('hudLocation')?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});closeLoc?.addEventListener('click',()=>drawer?.classList.remove('open'));menu?.addEventListener('click',()=>{nav?.classList.toggle('mobile-open');backdrop?.classList.toggle('visible');});backdrop?.addEventListener('click',()=>{nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');});window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'sky',false));document.addEventListener('keydown',e=>{if(e.key==='Escape'){drawer?.classList.remove('open');nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');}});
 function recover(){const p=document.querySelector('.app-page.active');if(!visible(p))showPage(location.hash.slice(1)||current||'sky',false);else refresh(current);syncLocation();}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(recover,80);});window.addEventListener('pageshow',()=>setTimeout(recover,80));window.addEventListener('focus',()=>setTimeout(recover,80));setInterval(()=>{if(!document.hidden)recover();},15000);setInterval(syncLocation,1000);syncLocation();['pointermove','pointerdown','wheel','touchstart'].forEach(ev=>document.addEventListener(ev,armChrome,{passive:true}));showPage(location.hash.slice(1)||'sky',false);
 })();

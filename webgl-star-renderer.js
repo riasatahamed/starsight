@@ -18,6 +18,8 @@
   uniform float uRotateDeg;
   uniform float uPanX;
   uniform float uPanY;
+  uniform float uViewYawDeg;
+  uniform float uViewPitchDeg;
   uniform float uZoom;
   uniform float uVisualZoom;
   uniform float uViewportW;
@@ -77,11 +79,56 @@
     }
 
     float zoom = (uArMode > 0.5) ? uArZoom : uZoom;
-    float r = max(uViewportW, uViewportH) * 0.85 * zoom;
-    float dist = (90.0 - altDeg) / 90.0 * r;
-    float angle = az + radians(uRotateDeg);
-    float x = uViewportW * 0.5 + uPanX + dist * sin(angle);
-    float y = uViewportH * 0.5 + uPanY - dist * cos(angle);
+
+    // True 3D celestial camera using the same stereographic hemisphere
+    // projection as the Canvas 2D layers. At the default orientation the
+    // zenith is centered and South is at the top.
+    float azRad = az;
+    float altCos = cos(alt);
+    float E = altCos * sin(azRad);
+    float N = altCos * cos(azRad);
+    float U = sin(alt);
+
+    float yaw = radians(uViewYawDeg);
+    float pitch = radians(uViewPitchDeg);
+    float roll = radians(uRotateDeg);
+    float cyaw = cos(yaw), syaw = sin(yaw);
+
+    vec3 right = vec3(-cyaw, -syaw, 0.0);
+    vec3 up = vec3(syaw, -cyaw, 0.0);
+    vec3 forward = vec3(0.0, 0.0, 1.0);
+
+    float cp = cos(pitch), sp = sin(pitch);
+    vec3 up2 = up * cp + forward * sp;
+    vec3 forward2 = forward * cp - up * sp;
+    up = up2;
+    forward = forward2;
+
+    float cr = cos(roll), sr = sin(roll);
+    vec3 right2 = right * cr + up * sr;
+    vec3 up3 = up * cr - right * sr;
+    right = right2;
+    up = up3;
+
+    vec3 sky = vec3(E, N, U);
+    float camX = dot(sky, right);
+    float camY = dot(sky, up);
+    float camZ = dot(sky, forward);
+
+    if (camZ <= 0.0005) {
+      gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+      gl_PointSize = 0.0;
+      vAlpha = 0.0;
+      vMag = aMag; vTemp = aTemp; vTwinkle = 1.0; vNamed = aNamed;
+      vScreen = vec2(-9999.0);
+      return;
+    }
+
+    float focal = max(uViewportW, uViewportH) * 0.425 * uVisualZoom;
+    float px = (camX / (1.0 + camZ)) * 2.0 * focal;
+    float py = (camY / (1.0 + camZ)) * 2.0 * focal;
+    float x = uViewportW * 0.5 + px + uPanX;
+    float y = uViewportH * 0.5 - py + uPanY;
 
     bool onScreen = x > -80.0 && x < uViewportW + 80.0 && y > -80.0 && y < uViewportH + 80.0;
     if (!onScreen) {
@@ -215,7 +262,7 @@
       temp: gl.getAttribLocation(program, 'aTemp'),
       named: gl.getAttribLocation(program, 'aNamed')
     };
-    const uniNames = ['uLstDeg','uLatRad','uRotateDeg','uPanX','uPanY','uZoom','uVisualZoom','uViewportW','uViewportH','uDpr','uMoving','uLodMag','uStarDim','uTime','uPhotoreal','uArMode','uArZoom'];
+    const uniNames = ['uLstDeg','uLatRad','uRotateDeg','uPanX','uPanY','uViewYawDeg','uViewPitchDeg','uZoom','uVisualZoom','uViewportW','uViewportH','uDpr','uMoving','uLodMag','uStarDim','uTime','uPhotoreal','uArMode','uArZoom'];
     const uni = {};
     uniNames.forEach(n => uni[n] = gl.getUniformLocation(program, n));
 
@@ -274,6 +321,8 @@
       gl.uniform1f(uni.uRotateDeg, opts.rotateDeg);
       gl.uniform1f(uni.uPanX, opts.panX);
       gl.uniform1f(uni.uPanY, opts.panY);
+      gl.uniform1f(uni.uViewYawDeg, opts.viewYawDeg || 0);
+      gl.uniform1f(uni.uViewPitchDeg, opts.viewPitchDeg || 0);
       gl.uniform1f(uni.uZoom, opts.zoom);
       gl.uniform1f(uni.uVisualZoom, opts.visualZoom);
       gl.uniform1f(uni.uViewportW, opts.cssW);
