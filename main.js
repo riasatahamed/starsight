@@ -429,9 +429,22 @@ document.addEventListener('visibilitychange', () => {
     if (timelapseActive && document.visibilityState === 'visible') requestTimelapseWakeLock();
 });
 
-let showConstellations = true, showGrid = false, showHorizon = true;
+let showConstellations = true, showGrid = false, showDomeGrid = false;
 let zoomLevel = 1;
 let visualZoomLevel = 1; // eased visual scale for cinematic zoom transitions
+
+// --- 1:1 "GRAB THE SKY" DRAG SCALING ---
+// The yaw/pitch camera drag below was tuned in screen-pixels-per-degree for the
+// default zoom (1x). That constant doesn't know about the current field of view,
+// so at any other zoom level a finger drag stops tracking the sky underneath it:
+// zoomed in, the same drag spins the view far past where your finger actually
+// moved; zoomed out, the view barely responds. That mismatch is what makes
+// panning feel disconnected compared to apps like Stellarium, where the point
+// under your finger stays under your finger at any zoom. Dividing the drag by
+// the current visual zoom restores that 1:1 feel at every zoom level.
+function getDragZoomScale() {
+    return 1 / Math.max(0.05, visualZoomLevel);
+}
 let currentBortle = 5;            
 
 let panX = 0, panY = 0;           
@@ -449,7 +462,15 @@ let compassPermissionPending = false;
 let compassAbsoluteSeen = false;
 let compassFallbackTimer = null;
 let compassHintTimer = null;
+let followDevicePitch = null;
+let followDeviceRoll = null;
+let savedManualViewYaw = 0;
+let savedManualViewPitch = 0;
+let savedManualViewRoll = 0;
 let isInteracting = false;
+const FOLLOW_DEVICE_ZOOM = 1.35; // ~94° horizontal field on the default stereographic sky camera.
+let savedManualZoom = 1;
+let compassGlobeLastPose = '';
 
 // --- ASTRONOMICAL POSITION UPDATE THROTTLE ---
 // Recomputing RA/Dec -> Alt/Az (precession + refraction) for every star, Milky Way
@@ -532,9 +553,9 @@ function updateMapHint() {
     if (arMode) {
         hint.textContent = touchFirst ? 'AR Active · point phone at sky' : 'AR Active · point phone at sky to locate objects';
     } else if (touchFirst) {
-        hint.textContent = compassModeActive ? 'phone compass active · tap compass to return south-up' : (rotateMode ? 'drag to rotate · pinch to zoom · tap for info · long-press to explore' : 'drag to pan · pinch to zoom · tap for info · long-press to explore');
+        hint.textContent = compassModeActive ? 'follow device · compass + gyro · tap compass to return to manual 3D' : 'drag the hemisphere · pinch to zoom · tap for info · long-press to explore';
     } else if (rotateMode) {
-        hint.textContent = compassModeActive ? 'phone compass active · tap compass to return south-up' : 'drag to rotate · scroll/pinch to zoom · hover for info · hold an object to explore';
+        hint.textContent = compassModeActive ? 'follow device · compass + gyro · tap compass to return to manual 3D' : 'drag to rotate · scroll/pinch to zoom · hover for info · hold an object to explore';
     } else {
         hint.textContent = 'drag to pan · scroll to zoom · hover for info · long-press to explore · double-click to slew';
     }
@@ -681,40 +702,109 @@ function applyCompassHeading(heading) {
         while (diff < -180) diff += 360;
 
         // Ignore tiny magnetometer noise, follow deliberate phone movement faster.
-        if (Math.abs(diff) < 0.18) return;
+        if (Math.abs(diff) < 0.12) return;
         const k = Math.abs(diff) > 18 ? 0.34 : (Math.abs(diff) > 5 ? 0.24 : 0.14);
         smoothCompassHeading += diff * k;
         smoothCompassHeading = (smoothCompassHeading + 360) % 360;
     }
-
-    // South-up is rotateOffset=0. To put the direction the phone points at the
-    // top of the sky, azimuth=heading must map to angle=0 => rotateOffset=180-heading.
-    rotateOffset = ((180 - smoothCompassHeading + 540) % 360) - 180;
-    updateCompassDialVisual();
-}
-function updateCompassDialVisual() {
-    const compass = document.getElementById('skyCompass');
-    if (!compass) return;
-    const dial = compass.querySelector('.compass-dial');
-    const labels = compass.querySelector('.compass-labels');
-    // South-up is neutral. In compass mode the cardinal ring rotates around a
-    // fixed center crosshair; the crosshair itself never rotates.
-    // The sky rotation math above remains v31.1. The compass ring itself is
-    // intentionally mirrored relative to that transform so the physical
-    // direction being pointed at appears under the fixed center crosshair.
-    // Example: pointing East puts E at the top, not W.
-    const deg = compassModeActive && Number.isFinite(smoothCompassHeading)
-        ? (180 - smoothCompassHeading)
-        : 0;
-    if (dial) dial.style.transform = `rotate(${deg}deg)`;
-    if (labels) labels.style.transform = `rotate(${deg}deg)`;
 }
 
+function getDeviceTiltAngles(event) {
+    const orientation = Number((window.screen.orientation || {}).angle ?? window.orientation ?? 0) || 0;
+    const beta = Number.isFinite(event.beta) ? event.beta : 0;
+    const gamma = Number.isFinite(event.gamma) ? event.gamma : 0;
 
-function processCompassOrientation(event) {
+    // Convert browser device axes into a stable screen-relative pitch/roll.
+    // Portrait: beta is front/back tilt, gamma is side roll. Landscape swaps them.
+    switch (((orientation % 360) + 360) % 360) {
+        case 90:  return { pitch: gamma, roll: -beta };
+        case 180: return { pitch: -beta, roll: -gamma };
+        case 270: return { pitch: -gamma, roll: beta };
+        default:   return { pitch: beta, roll: gamma };
+    }
+}
+
+function applyDeviceOrientation(event) {
     if (!compassModeActive || arMode) return;
+
     const heading = getCompassHeadingFromEvent(event);
     if (heading !== null) applyCompassHeading(heading);
+
+    if (Number.isFinite(smoothCompassHeading)) {
+        const tilt = getDeviceTiltAngles(event);
+        followDevicePitch = smoothAngle(followDevicePitch, tilt.pitch, 0.16);
+        followDeviceRoll = smoothAngle(followDeviceRoll, tilt.roll, 0.16);
+
+        // The 3D sky camera uses South-up at yaw=0. A physical heading of H
+        // therefore maps to a camera yaw of -H. Pitch is the phone's look angle;
+        // a level phone shows the zenith, while tilting it upright brings the
+        // corresponding horizon direction toward the centre.
+        viewYawDeg = ((-smoothCompassHeading + 540) % 360) - 180;
+        viewPitchDeg = Math.max(-80, Math.min(80, followDevicePitch || 0));
+        rotateOffset = Math.max(-45, Math.min(45, followDeviceRoll || 0));
+        panX = 0;
+        panY = 0;
+        updateCompassDialVisual();
+        requestAnimationFrame(drawMap);
+    }
+}
+
+function drawCompassGlobe() {
+    const c = document.getElementById('compassGlobe');
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    const W = c.width, H = c.height, cx = W/2, cy = H/2, R = 54;
+    const yaw = (viewYawDeg || 0) * Math.PI/180;
+    const pitch = (viewPitchDeg || 0) * Math.PI/180;
+    const roll = (rotateOffset || 0) * Math.PI/180;
+    const cyaw=Math.cos(yaw), syaw=Math.sin(yaw);
+    let rx=-cyaw, ry=-syaw, rz=0, ux=syaw, uy=-cyaw, uz=0, fx=0, fy=0, fz=1;
+    const cp=Math.cos(pitch), sp=Math.sin(pitch);
+    let nux=ux*cp+fx*sp, nuy=uy*cp+fy*sp, nuz=uz*cp+fz*sp;
+    let nfx=fx*cp-ux*sp, nfy=fy*cp-uy*sp, nfz=fz*cp-uz*sp;
+    ux=nux;uy=nuy;uz=nuz;fx=nfx;fy=nfy;fz=nfz;
+    const cr=Math.cos(roll), sr=Math.sin(roll);
+    let nrx=rx*cr+ux*sr, nry=ry*cr+uy*sr, nrz=rz*cr+uz*sr;
+    let nurx=ux*cr-rx*sr, nury=uy*cr-ry*sr, nurz=uz*cr-rz*sr;
+    rx=nrx;ry=nry;rz=nrz;ux=nurx;uy=nury;uz=nurz;
+    const project=(E,N,U)=>{
+        const x=E*rx+N*ry+U*rz, y=E*ux+N*uy+U*uz, z=E*fx+N*fy+U*fz;
+        if(z<=-0.02) return null;
+        const d=1+Math.max(-.98,z);
+        return [cx+(x/d)*R*1.55, cy-(y/d)*R*1.55, z];
+    };
+    ctx.clearRect(0,0,W,H);
+    // Sphere silhouette / atmosphere.
+    const g=ctx.createRadialGradient(38,31,4,46,48,48);
+    g.addColorStop(0,'rgba(35,62,92,.55)'); g.addColorStop(.72,'rgba(8,18,32,.55)'); g.addColorStop(1,'rgba(2,5,10,.9)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.clip();
+    const line=(pts,alpha=.34,width=.65)=>{ ctx.beginPath(); let first=true; for(const q of pts){if(!q){first=true;continue;} if(first){ctx.moveTo(q[0],q[1]);first=false}else ctx.lineTo(q[0],q[1]);} ctx.strokeStyle=`rgba(130,205,255,${alpha})`;ctx.lineWidth=width;ctx.stroke(); };
+    // Longitude lines.
+    for(let az=0;az<360;az+=30){const pts=[];const a=az*Math.PI/180;for(let alt=-90;alt<=90;alt+=4){const ar=alt*Math.PI/180;pts.push(project(Math.cos(ar)*Math.sin(a),Math.cos(ar)*Math.cos(a),Math.sin(ar)));}line(pts,.30,.65);}
+    // Latitude lines.
+    for(let alt=-60;alt<=60;alt+=30){const pts=[];const ar=alt*Math.PI/180;for(let az=0;az<=360;az+=4){const a=az*Math.PI/180;pts.push(project(Math.cos(ar)*Math.sin(a),Math.cos(ar)*Math.cos(a),Math.sin(ar)));}line(pts,.25,.65);}
+    // Horizon ring.
+    const hp=[];for(let az=0;az<=360;az+=3){const a=az*Math.PI/180;hp.push(project(Math.sin(a),Math.cos(a),0));}line(hp,.62,1.15);
+    // Direction labels are attached to the sphere, not screen-fixed.
+    ctx.font='700 10px "Space Grotesk",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    const dirs=[['N',0],['NE',45],['E',90],['SE',135],['S',180],['SW',225],['W',270],['NW',315]];
+    for(const [lab,az] of dirs){const a=az*Math.PI/180;const q=project(Math.sin(a)*.98,Math.cos(a)*.98,0);if(!q||q[2]<-.02)continue;ctx.fillStyle=lab==='N'?'rgba(255,255,255,.98)':'rgba(205,232,255,.76)';ctx.fillText(lab,q[0],q[1]);}
+    const z=project(0,0,1); if(z){ctx.fillStyle='rgba(255,255,255,.9)';ctx.font='700 8.5px "IBM Plex Mono",monospace';ctx.fillText('ZENITH',z[0],z[1]-5);}
+    ctx.restore();
+    // Optical axis crosshair and small orientation cue.
+    ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=.7;ctx.beginPath();ctx.moveTo(cx-11,cy);ctx.lineTo(cx+11,cy);ctx.moveTo(cx,cy-11);ctx.lineTo(cx,cy+11);ctx.stroke();
+    ctx.strokeStyle='rgba(90,200,255,.55)';ctx.beginPath();ctx.arc(cx,cy,R+.5,0,Math.PI*2);ctx.stroke();
+}
+function updateCompassDialVisual(force=false) {
+    const pose=`${viewYawDeg.toFixed(2)}|${viewPitchDeg.toFixed(2)}|${rotateOffset.toFixed(2)}|${compassModeActive}`;
+    if(!force && pose===compassGlobeLastPose)return;
+    compassGlobeLastPose=pose;
+    drawCompassGlobe();
+}
+
+function processCompassOrientation(event) {
+    applyDeviceOrientation(event);
 }
 
 function setCompassVisual(active) {
@@ -722,12 +812,13 @@ function setCompassVisual(active) {
     const hint = document.getElementById('compassHint');
     if (!compass) return;
     compass.classList.toggle('compass-active', active);
+    compass.classList.toggle('follow-device', active);
     updateCompassDialVisual();
     compass.setAttribute('aria-pressed', active ? 'true' : 'false');
-    compass.setAttribute('aria-label', active ? 'Compass alignment active. Tap to return to south-up' : 'Align sky to phone compass');
-    compass.title = active ? 'Compass alignment active — tap to return south-up' : 'Tap to align sky with your phone direction';
+    compass.setAttribute('aria-label', active ? 'Follow device active. Tap to return to manual 3D sky' : 'Follow the sky with your device orientation');
+    compass.title = active ? 'Follow Device active — tap to return to manual 3D sky' : 'Tap to follow the sky with your phone';
     if (hint) {
-        hint.textContent = active ? 'COMPASS ACTIVE' : 'TAP TO ALIGN';
+        hint.textContent = active ? 'FOLLOW DEVICE · COMPASS + GYRO' : '3D SKY · TAP TO FOLLOW DEVICE';
         hint.classList.toggle('active', active);
     }
 }
@@ -735,22 +826,30 @@ function setCompassVisual(active) {
 function showCompassHintOnce() {
     const hint = document.getElementById('compassHint');
     if (!hint) return;
-    hint.textContent = 'TAP TO ACTIVATE COMPASS';
+    hint.textContent = '3D SKY · DRAG TO LOOK AROUND · TAP COMPASS TO FOLLOW DEVICE';
     hint.classList.add('visible');
     clearTimeout(compassHintTimer);
-    compassHintTimer = setTimeout(() => hint.classList.remove('visible'), 1900);
+    compassHintTimer = setTimeout(() => hint.classList.remove('visible'), 2600);
 }
 
 function stopCompassAlignment(resetSky = true) {
     compassModeActive = false;
     compassHeading = null;
     smoothCompassHeading = null;
+    followDevicePitch = null;
+    followDeviceRoll = null;
     compassAbsoluteSeen = false;
     compassPermissionPending = false;
     if (compassFallbackTimer) { clearTimeout(compassFallbackTimer); compassFallbackTimer = null; }
     window.removeEventListener('deviceorientation', processCompassOrientation, true);
     window.removeEventListener('deviceorientationabsolute', processCompassOrientation, true);
-    if (resetSky) rotateOffset = 0;
+    if (resetSky) {
+        viewYawDeg = savedManualViewYaw;
+        viewPitchDeg = savedManualViewPitch;
+        rotateOffset = savedManualViewRoll;
+        zoomLevel = savedManualZoom;
+        visualZoomLevel = savedManualZoom;
+    }
     setCompassVisual(false);
     updateMapHint();
     drawMap();
@@ -760,9 +859,19 @@ function startCompassAlignment() {
     if (arMode || timelapseActive) return;
     if (compassPermissionPending) return;
     if (!('DeviceOrientationEvent' in window)) {
-        showArMessage('Compass sensors are not available on this device.', 3000);
+        showArMessage('Compass and motion sensors are not available on this device.', 3000);
         return;
     }
+
+    // Preserve the exact manual 3D pose so toggling Follow Device off returns
+    // to the same place instead of resetting the user's sky view.
+    savedManualViewYaw = viewYawDeg;
+    savedManualViewPitch = viewPitchDeg;
+    savedManualViewRoll = rotateOffset;
+    savedManualZoom = zoomLevel;
+    smoothCompassHeading = null;
+    followDevicePitch = null;
+    followDeviceRoll = null;
 
     const addCompassSensors = () => {
         window.removeEventListener('deviceorientation', processCompassOrientation, true);
@@ -771,14 +880,19 @@ function startCompassAlignment() {
         compassFallbackTimer = null;
         window.addEventListener('deviceorientationabsolute', processCompassOrientation, true);
         window.addEventListener('deviceorientation', processCompassOrientation, true);
-        // If Chrome does not emit an absolute stream on this device, permit the
-        // regular stream after a short grace period. Until then, only calibrated
-        // absolute readings are allowed, preventing sensor-source fighting.
+        // Prefer calibrated absolute orientation/compass. Permit the ordinary
+        // stream only after the short grace period if no absolute stream appears.
         compassFallbackTimer = setTimeout(() => {
             compassFallbackTimer = null;
         }, 1200);
         compassPermissionPending = false;
         compassModeActive = true;
+        // Device-follow is a sighting mode: use a wide, stable ~94° field so the
+        // direction the phone points at sits at the centre while nearby stars keep
+        // their correct relative angular spacing on screen.
+        zoomLevel = FOLLOW_DEVICE_ZOOM;
+        visualZoomLevel = FOLLOW_DEVICE_ZOOM;
+        panX = 0; panY = 0;
         setCompassVisual(true);
         updateMapHint();
         requestAnimationFrame(drawMap);
@@ -790,12 +904,12 @@ function startCompassAlignment() {
             if (state === 'granted') addCompassSensors();
             else {
                 compassPermissionPending = false;
-                showArMessage('Compass permission denied.', 3000);
+                showArMessage('Motion and compass permission denied.', 3000);
             }
         }).catch(err => {
             compassPermissionPending = false;
-            console.warn('Compass permission error:', err);
-            showArMessage('Could not access the compass sensor.', 3000);
+            console.warn('Motion/compass permission error:', err);
+            showArMessage('Could not access motion and compass sensors.', 3000);
         });
     } else {
         addCompassSensors();
@@ -966,7 +1080,6 @@ function restoreMapUI() {
     document.getElementById('btnFullscreen').style.display = 'flex';
     document.getElementById('arUIOverlay').style.display = 'none';
     document.getElementById('arUIOverlay').style.visibility = 'hidden';
-    document.getElementById('btnARMap').style.display = 'flex'; 
     document.getElementById('btnSunMap').style.display = 'flex';
 }
 
@@ -1031,7 +1144,6 @@ function toggleAR() {
         document.querySelector('.panel-map .panel-header').style.display = 'none';
         document.querySelector('.panel-map .map-footer').style.display = 'none';
         document.getElementById('btnFullscreen').style.display = 'none';
-        document.getElementById('btnARMap').style.display = 'none';
         document.getElementById('btnSunMap').style.display = 'none';
         
         document.getElementById('arUIOverlay').style.display = 'block';
@@ -1919,6 +2031,178 @@ function projectAz(alt, az) {
     return projectENU(E, N, U);
 }
 
+// --- HORIZON DIRECTION MARKERS (N / NE / E / SE / S / SW / W / NW) ---
+// Direction markers use the same 3D camera orientation as the sky. At the
+// absolute minimum zoom (0.4x), all eight directions remain available as
+// compact edge markers. Once the user zooms in, only directions that are
+// actually inside the current sky view are drawn — never off-screen.
+const CARDINAL_DIRS = [
+    { label: 'N',  az: 0   },
+    { label: 'NE', az: 45  },
+    { label: 'E',  az: 90  },
+    { label: 'SE', az: 135 },
+    { label: 'S',  az: 180 },
+    { label: 'SW', az: 225 },
+    { label: 'W',  az: 270 },
+    { label: 'NW', az: 315 }
+];
+const CARDINAL_COLOR = '#00f0ff';
+const MIN_SKY_ZOOM = 0.4;
+
+function getDirectionMarkerProjection(az) {
+    const w = _projW, h = _projH, cx = _projCx, cy = _projCy;
+    const azRad = az * Math.PI / 180;
+    const E = Math.sin(azRad);
+    const N = Math.cos(azRad);
+
+    // Same camera basis as projectENU(), but we intentionally keep the horizon
+    // direction as U=0 so the marker represents the true horizon direction.
+    const yaw = viewYawDeg * Math.PI / 180;
+    const pitch = viewPitchDeg * Math.PI / 180;
+    const roll = rotateOffset * Math.PI / 180;
+    const cyaw = Math.cos(yaw), syaw = Math.sin(yaw);
+
+    let rx = -cyaw, ry = -syaw, rz = 0;
+    let ux = syaw,  uy = -cyaw, uz = 0;
+    let fx = 0, fy = 0, fz = 1;
+
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const nux = ux * cp + fx * sp;
+    const nuy = uy * cp + fy * sp;
+    const nuz = uz * cp + fz * sp;
+    const nfx = fx * cp - ux * sp;
+    const nfy = fy * cp - uy * sp;
+    const nfz = fz * cp - uz * sp;
+    ux = nux; uy = nuy; uz = nuz;
+    fx = nfx; fy = nfy; fz = nfz;
+
+    const cr = Math.cos(roll), sr = Math.sin(roll);
+    const nrx = rx * cr + ux * sr;
+    const nry = ry * cr + uy * sr;
+    const nrz = rz * cr + uz * sr;
+    const nurx = ux * cr - rx * sr;
+    const nury = uy * cr - ry * sr;
+    const nurz = uz * cr - rz * sr;
+    rx = nrx; ry = nry; rz = nrz;
+    ux = nurx; uy = nury; uz = nurz;
+
+    const camX = E * rx + N * ry;
+    const camY = E * ux + N * uy;
+    const camZ = E * fx + N * fy;
+
+    const focal = Math.max(w, h) * 0.425 * Math.max(visualZoomLevel, MIN_SKY_ZOOM);
+
+    if (camZ > 0.0005) {
+        const denom = 1 + camZ;
+        const x = cx + (camX / denom) * 2 * focal;
+        const y = cy - (camY / denom) * 2 * focal;
+        const margin = 18;
+        if (x >= margin && x <= w - margin && y >= margin && y <= h - margin) {
+            return { x, y, edge: false };
+        }
+    }
+
+    // Edge indicators are ONLY a minimum-zoom feature. This prevents a
+    // direction that has genuinely left the field of view from lingering on
+    // screen while zoomed in. Use zoomLevel (the user's actual target zoom),
+    // not visualZoomLevel, so the marker does not animate/fall during the
+    // eased zoom transition.
+    if (zoomLevel > MIN_SKY_ZOOM + 0.0001) return null;
+
+    const len = Math.hypot(camX, camY) || 1;
+    const sx = camX / len;
+    const sy = -camY / len;
+    const margin = Math.max(22, Math.min(w, h) * 0.055);
+    const halfW = Math.max(1, w / 2 - margin);
+    const halfH = Math.max(1, h / 2 - margin);
+    const scale = Math.min(halfW / Math.max(Math.abs(sx), 0.0001), halfH / Math.max(Math.abs(sy), 0.0001));
+
+    return {
+        x: cx + sx * scale,
+        y: cy + sy * scale,
+        edge: true
+    };
+}
+
+function drawCardinalMarkers(ctx) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 12px "Space Grotesk", sans-serif';
+    ctx.lineJoin = 'round';
+
+    CARDINAL_DIRS.forEach(d => {
+        const p = getDirectionMarkerProjection(d.az);
+        if (!p) return;
+
+        ctx.globalAlpha = p.edge ? 0.72 : 1.0;
+        ctx.shadowColor = CARDINAL_COLOR;
+        ctx.shadowBlur = p.edge ? 6 : 9;
+        ctx.fillStyle = CARDINAL_COLOR;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.edge ? 2.2 : 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(3, 6, 14, 0.82)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(d.label, p.x, p.y - (p.edge ? 10 : 13));
+        ctx.shadowColor = 'rgba(0, 240, 255, 0.65)';
+        ctx.shadowBlur = p.edge ? 5 : 7;
+        ctx.fillText(d.label, p.x, p.y - (p.edge ? 10 : 13));
+    });
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
+}
+
+// --- DOME GRID ---
+// Replaces the old flat-disk horizon ring. Every line is sampled at several
+// points and pushed through the same yaw/pitch/roll-aware projectAz() used for
+// stars, rather than being drawn as a straight chord or a circle fixed to the
+// screen centre — so the meridians and altitude rings genuinely curve to match
+// whichever part of the dome you're currently looking at, including off-zenith
+// views, instead of only looking right when facing straight up.
+function drawDomeGrid(ctx) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.16)';
+    ctx.lineWidth = 1;
+
+    // Azimuth meridians: zenith down to the horizon, one every 30°.
+    for (let az = 0; az < 360; az += 30) {
+        ctx.beginPath();
+        let first = true;
+        for (let alt = 0; alt <= 90; alt += 4) {
+            const p = projectAz(alt, az);
+            if (p.z3d > 0.02 && p.onScreen) {
+                if (first) { ctx.moveTo(p.x, p.y); first = false; }
+                else ctx.lineTo(p.x, p.y);
+            } else {
+                first = true;
+            }
+        }
+        ctx.stroke();
+    }
+
+    // Altitude rings, including the horizon itself (alt 0) as the dome's base.
+    for (let alt = 0; alt <= 80; alt += 20) {
+        ctx.beginPath();
+        let first = true;
+        for (let az = 0; az <= 360; az += 4) {
+            const p = projectAz(alt, az);
+            if (p.z3d > 0.02 && p.onScreen) {
+                if (first) { ctx.moveTo(p.x, p.y); first = false; }
+                else ctx.lineTo(p.x, p.y);
+            } else {
+                first = true;
+            }
+        }
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
 let lastStarPositions = [];
 const dsoRenderPositions = DSO_OBJECTS.map(obj => ({ ...obj }));
 let lastPlanetPositions = [];
@@ -2788,6 +3072,7 @@ function drawLightweightMilkyWay(ctx, astroTime, observer, mwFader, r, w, h) {
 }
 
 function drawMap() {
+    updateCompassDialVisual();
     // Skip the entire render pipeline while the sky view isn't actually what's
     // on screen — another in-app page is active, or the app is backgrounded.
     // (`pageAttr === undefined` covers the very first call during startup,
@@ -2865,6 +3150,9 @@ function drawMap() {
 
     // WebGL2 handles the star field as a single GPU point draw. The 2D canvas remains
     // responsible for the sky background, Milky Way, DSOs, planets, labels and UI.
+    // Follow Device intentionally stays on the normal sky renderer. Only the
+    // camera pose changes; the photorealistic/WebGL star treatment is identical
+    // to ordinary Sky Map mode, unlike the dedicated Camera AR renderer.
     if (starWebGLEnabled && starWebGLRenderer && !arMode && !timelapseActive) {
         try {
             const gmstForGL = Astronomy.SiderealTime(astroTime);
@@ -2955,92 +3243,71 @@ function drawMap() {
 
     const drawnLabels = [];
 
-    if (showHorizon) {
-        if (arMode) {
-            const camSinAlt = R_matrix[8]; 
-            
-            if (camSinAlt > -0.7) {
-                if (camSinAlt > 0.9) {
+    // Ground occlusion (AR only) and the cardinal N/E/S/W markers are always on —
+    // they're baseline orientation aids, not an optional overlay, so they're no
+    // longer tied to a toggle. The old flat-disk horizon ring is gone; on the real
+    // dome the horizon boundary itself is now available as part of the Dome Grid
+    // below, drawn accurately instead of as a screen-centred circle.
+    if (arMode) {
+        const camSinAlt = R_matrix[8]; 
+        
+        if (camSinAlt > -0.7) {
+            if (camSinAlt > 0.9) {
+                ctx.fillStyle = cameraActive ? 'rgba(0,0,0,0.7)' : '#010205';
+                ctx.fillRect(-w, -h, w*3, h*3);
+            } else {
+                let centerAz = syntheticAzimuth;
+                if (arTrackingActive && smoothAlpha !== null) {
+                    centerAz = ((360 - smoothAlpha + 180) % 360 + 360) % 360;
+                }
+
+                const horizonPoints = [];
+                for(let a = centerAz - 85; a <= centerAz + 85; a += 2) {
+                    let az = (a % 360 + 360) % 360;
+                    const p = projectAz(0, az);
+                    if (p.z3d > 0.01) {
+                        horizonPoints.push(p);
+                    }
+                }
+
+                if (horizonPoints.length > 0) {
+                    const focalLength = Math.max(w, h) * 0.85 * arZoomLevel;
+                    const gx = -R_matrix[6];
+                    const gy = -R_matrix[7];
+                    const O = screenOrientation * Math.PI / 180;
+                    const downX = gx * Math.cos(O) + gy * Math.sin(O);
+                    const downY = -(-gx * Math.sin(O) + gy * Math.cos(O));
+                    
+                    const mag = Math.sqrt(downX*downX + downY*downY) || 1;
+                    const ndx = (downX / mag) * 10000; 
+                    const ndy = (downY / mag) * 10000;
+
                     ctx.fillStyle = cameraActive ? 'rgba(0,0,0,0.7)' : '#010205';
-                    ctx.fillRect(-w, -h, w*3, h*3);
-                } else {
-                    let centerAz = syntheticAzimuth;
-                    if (arTrackingActive && smoothAlpha !== null) {
-                        centerAz = ((360 - smoothAlpha + 180) % 360 + 360) % 360;
+                    ctx.beginPath();
+                    ctx.moveTo(horizonPoints[0].x, horizonPoints[0].y);
+                    for (let i = 1; i < horizonPoints.length; i++) {
+                        ctx.lineTo(horizonPoints[i].x, horizonPoints[i].y);
                     }
-
-                    const horizonPoints = [];
-                    for(let a = centerAz - 85; a <= centerAz + 85; a += 2) {
-                        let az = (a % 360 + 360) % 360;
-                        const p = projectAz(0, az);
-                        if (p.z3d > 0.01) {
-                            horizonPoints.push(p);
-                        }
+                    ctx.lineTo(horizonPoints[horizonPoints.length-1].x + ndx, horizonPoints[horizonPoints.length-1].y + ndy);
+                    ctx.lineTo(horizonPoints[0].x + ndx, horizonPoints[0].y + ndy);
+                    ctx.fill();
+                    
+                    ctx.lineWidth = 2.5;
+                    ctx.strokeStyle = cameraActive ? 'rgba(201,169,110,0.6)' : 'rgba(100, 150, 255, 0.9)';
+                    ctx.beginPath();
+                    ctx.moveTo(horizonPoints[0].x, horizonPoints[0].y);
+                    for (let i = 1; i < horizonPoints.length; i++) {
+                        ctx.lineTo(horizonPoints[i].x, horizonPoints[i].y);
                     }
-
-                    if (horizonPoints.length > 0) {
-                        const focalLength = Math.max(w, h) * 0.85 * arZoomLevel;
-                        const gx = -R_matrix[6];
-                        const gy = -R_matrix[7];
-                        const O = screenOrientation * Math.PI / 180;
-                        const downX = gx * Math.cos(O) + gy * Math.sin(O);
-                        const downY = -(-gx * Math.sin(O) + gy * Math.cos(O));
-                        
-                        const mag = Math.sqrt(downX*downX + downY*downY) || 1;
-                        const ndx = (downX / mag) * 10000; 
-                        const ndy = (downY / mag) * 10000;
-
-                        ctx.fillStyle = cameraActive ? 'rgba(0,0,0,0.7)' : '#010205';
-                        ctx.beginPath();
-                        ctx.moveTo(horizonPoints[0].x, horizonPoints[0].y);
-                        for (let i = 1; i < horizonPoints.length; i++) {
-                            ctx.lineTo(horizonPoints[i].x, horizonPoints[i].y);
-                        }
-                        ctx.lineTo(horizonPoints[horizonPoints.length-1].x + ndx, horizonPoints[horizonPoints.length-1].y + ndy);
-                        ctx.lineTo(horizonPoints[0].x + ndx, horizonPoints[0].y + ndy);
-                        ctx.fill();
-                        
-                        ctx.lineWidth = 2.5;
-                        ctx.strokeStyle = cameraActive ? 'rgba(201,169,110,0.6)' : 'rgba(100, 150, 255, 0.9)';
-                        ctx.beginPath();
-                        ctx.moveTo(horizonPoints[0].x, horizonPoints[0].y);
-                        for (let i = 1; i < horizonPoints.length; i++) {
-                            ctx.lineTo(horizonPoints[i].x, horizonPoints[i].y);
-                        }
-                        ctx.stroke();
-                    }
+                    ctx.stroke();
                 }
             }
-
-            ctx.fillStyle = cameraActive ? 'rgba(201,169,110,0.8)' : 'rgba(100, 150, 255, 0.9)';
-            ctx.font = '500 12px "Space Grotesk", sans-serif';
-            ctx.textAlign = 'center';
-            const dirs = [ {label:'N', az:0}, {label:'E', az:90}, {label:'S', az:180}, {label:'W', az:270} ];
-            dirs.forEach(d => {
-                const p = projectAz(0, d.az);
-                if (p.z3d > 0.1 && p.onScreen) {
-                    ctx.fillText(d.label, p.x, p.y + 20);
-                }
-            });
-            ctx.textAlign = 'left';
-        } else {
-            ctx.strokeStyle = 'rgba(201,169,110,0.08)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([4, 4]);
-            ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = 'rgba(201,169,110,0.25)';
-            ctx.font = '500 10px "Space Grotesk", sans-serif';
-            ctx.textAlign = 'center';
-            const dirs = [ {label:'N', az:0}, {label:'E', az:90}, {label:'S', az:180}, {label:'W', az:270} ];
-            dirs.forEach(d => {
-                const angleRad = (d.az - 180 + rotateOffset) * Math.PI / 180;
-                const dx = cx + (r + 14) * Math.sin(angleRad);
-                const dy = cy - (r + 14) * Math.cos(angleRad);
-                ctx.fillText(d.label, dx, dy + 3);
-            });
-            ctx.textAlign = 'left';
         }
+
+        drawCardinalMarkers(ctx);
+    } else {
+        drawCardinalMarkers(ctx);
+        if (showDomeGrid) drawDomeGrid(ctx);
     }
 
     if (showGrid) {
@@ -3792,9 +4059,10 @@ function drawMap() {
         ctx.textAlign = 'center';
         ctx.fillText('Star map unavailable', canvas.width / Math.min(window.devicePixelRatio, 2) / 2, canvas.height / Math.min(window.devicePixelRatio, 2) / 2);
     }
-    // --- COMPASS DIAL ---
-    // The center crosshair stays fixed. Only the N/E/S/W ring rotates so the
-    // direction the phone is pointing at remains under the crosshair.
+    // --- 3D COMPASS ---
+    // The compass is a miniature of the same celestial camera. It follows manual
+    // hemisphere interaction and device-follow orientation without changing the
+    // sky renderer itself.
     updateCompassDialVisual();
     requestAnimationFrame(drawMap);
 }
@@ -3920,14 +4188,16 @@ window.addEventListener('mousemove', e => {
         updateRMatrixFromSynthetic();
     } else if (rotateMode) {
         const dx = e.clientX - interactStartX;
-        rotateOffset = interactStartRotate + dx * 0.5;
+        rotateOffset = interactStartRotate + dx * 0.5 * getDragZoomScale();
     } else {
         const dx = e.clientX - interactStartX;
         const dy = e.clientY - interactStartY;
         if (CELESTIAL_3D_MODE) {
-            viewYawDeg = (interactStartViewYaw - dx * 0.32 + 540) % 360 - 180;
-            viewPitchDeg = Math.max(-80, Math.min(80, interactStartViewPitch + dy * 0.24));
+            const dragScale = getDragZoomScale();
+            viewYawDeg = (interactStartViewYaw - dx * 0.32 * dragScale + 540) % 360 - 180;
+            viewPitchDeg = Math.max(-80, Math.min(80, interactStartViewPitch + dy * 0.24 * dragScale));
             panX = 0; panY = 0;
+            updateCompassDialVisual();
         } else {
             panX = interactStartPanX + dx; panY = interactStartPanY + dy;
             constrainPan();
@@ -4117,13 +4387,14 @@ canvas.addEventListener('touchmove', e => {
             }
         } else if (rotateMode) {
             const dx = e.touches[0].clientX - interactStartX;
-            rotateOffset = interactStartRotate + dx * 0.5;
+            rotateOffset = interactStartRotate + dx * 0.5 * getDragZoomScale();
         } else {
             const dx = e.touches[0].clientX - interactStartX;
             const dy = e.touches[0].clientY - interactStartY;
             if (CELESTIAL_3D_MODE) {
-                viewYawDeg = (interactStartViewYaw - dx * 0.32 + 540) % 360 - 180;
-                viewPitchDeg = Math.max(-80, Math.min(80, interactStartViewPitch + dy * 0.24));
+                const dragScale = getDragZoomScale();
+                viewYawDeg = (interactStartViewYaw - dx * 0.32 * dragScale + 540) % 360 - 180;
+                viewPitchDeg = Math.max(-80, Math.min(80, interactStartViewPitch + dy * 0.24 * dragScale));
                 panX = 0; panY = 0;
             } else {
                 panX = interactStartPanX + dx; panY = interactStartPanY + dy;
@@ -4217,8 +4488,7 @@ function showSkyToolStatus(message) {
 function syncSkyToolStates() {
     setSkyToolActive('constellations', showConstellations);
     setSkyToolActive('grid', showGrid);
-    setSkyToolActive('horizon', showHorizon);
-    setSkyToolActive('rotate', rotateMode);
+    setSkyToolActive('dome', showDomeGrid);
     setSkyToolActive('sun', !sunForcedOff);
     setSkyToolActive('night', !!document.documentElement.classList.contains('night-mode'));
 }
@@ -4235,15 +4505,14 @@ function toggleGrid() {
     showSkyToolStatus(`GRID ${showGrid ? 'ON' : 'OFF'}`);
     drawMap();
 }
-function toggleHorizon() {
-    showHorizon = !showHorizon;
-    setSkyToolActive('horizon', showHorizon);
-    showSkyToolStatus(`HORIZON ${showHorizon ? 'ON' : 'OFF'}`);
+function toggleDomeGrid() {
+    showDomeGrid = !showDomeGrid;
+    setSkyToolActive('dome', showDomeGrid);
+    showSkyToolStatus(`DOME GRID ${showDomeGrid ? 'ON' : 'OFF'}`);
     drawMap();
 }
 function toggleRotateMode() {
     rotateMode = !rotateMode;
-    setSkyToolActive('rotate', rotateMode);
     showSkyToolStatus(`ROTATE MODE ${rotateMode ? 'ON' : 'OFF'}`);
     updateMapHint();
 }

@@ -14,28 +14,28 @@
 <!-- Open Graph -->
 <meta content="StarSight" property="og:title"/>
 <meta content="A precise telescope navigation and astronomy companion." property="og:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=320" property="og:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=322" property="og:image"/>
 <meta content="https://riasatahamed.github.io/starsight/" property="og:url"/>
 <meta content="website" property="og:type"/>
 <!-- Twitter / X -->
 <meta content="summary_large_image" name="twitter:card"/>
 <meta content="StarSight" name="twitter:title"/>
 <meta content="A precise telescope navigation and astronomy companion." name="twitter:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=320" name="twitter:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=322" name="twitter:image"/>
 <!-- Favicon -->
-<link href="images/StarSight_Logo.png?v=320" rel="icon" type="image/png"/>
+<link href="images/StarSight_Logo.png?v=322" rel="icon" type="image/png"/>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
 <!-- LINK TO YOUR NEW CSS FILE -->
-<link href="style.css?v=320" rel="stylesheet"/>
+<link href="style.css?v=322" rel="stylesheet"/>
 <!-- PWA & Mobile Meta -->
-<link href="manifest.json?v=320" rel="manifest"/>
+<link href="manifest.json?v=322" rel="manifest"/>
 <meta content="#05060a" name="theme-color"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="StarSight" name="apple-mobile-web-app-title"/>
-<link href="images/StarSight_Logo.png?v=320" rel="apple-touch-icon"/>
+<link href="images/StarSight_Logo.png?v=322" rel="apple-touch-icon"/>
 </head>
 <body>
 <div class="fixed-bg"></div>
@@ -142,25 +142,14 @@
 <svg fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="20"><circle cx="12" cy="12" r="5"></circle><line x1="12" x2="12" y1="1" y2="3"></line><line x1="12" x2="12" y1="21" y2="23"></line><line x1="4.22" x2="5.64" y1="4.22" y2="5.64"></line><line x1="18.36" x2="19.78" y1="18.36" y2="19.78"></line><line x1="1" x2="3" y1="12" y2="12"></line><line x1="21" x2="23" y1="12" y2="12"></line><line x1="4.22" x2="5.64" y1="19.78" y2="18.36"></line><line x1="18.36" x2="19.78" y1="5.64" y2="4.22"></line></svg>
 <span>SUN</span>
 </button>
-<button class="floating-btn right" id="btnARMap" onclick="toggleAR()" title="Launch AR Planetarium">
-<svg fill="none" height="22" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="22">
-<path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
-<circle cx="12" cy="12" r="3"></circle>
-</svg>
-<span>AR</span>
-</button>
 <!-- NEW COMPASS UI -->
-<button class="sky-compass south-up" id="skyCompass" type="button" aria-label="Align sky to phone compass" title="Tap to align sky with your phone direction">
-<div class="compass-dial"></div>
-<div class="compass-labels">
-<span class="n">N</span><span class="e">E</span><span class="s">S</span><span class="w">W</span>
-</div>
-<div class="compass-crosshair" aria-hidden="true"><span></span><span></span></div>
-<div class="compass-center" aria-hidden="true"></div>
+<button class="sky-compass" id="skyCompass" type="button" aria-pressed="false" aria-label="Follow the sky with your device orientation" title="Tap to follow the sky with your phone">
+<canvas id="compassGlobe" width="132" height="132" aria-hidden="true"></canvas>
+<span class="compass-follow-dot" aria-hidden="true"></span>
 </button>
-<div class="compass-hint" id="compassHint" aria-hidden="true">TAP TO ACTIVATE COMPASS</div>
+<div class="compass-hint" id="compassHint" aria-hidden="true">3D SKY · DRAG TO LOOK AROUND · TAP COMPASS TO FOLLOW DEVICE</div>
 <div class="sky-tool-status" id="skyToolStatus" aria-live="polite" aria-atomic="true"></div>
-<div class="sky-tool-dock" id="skyToolDock" aria-label="Sky tools"><button class="sky-tool-icon" data-tool="constellations" onclick="toggleConstellations()" title="Constellations" aria-label="Constellations"><span>☆</span></button><button class="sky-tool-icon" data-tool="grid" onclick="toggleGrid()" title="Coordinate grid" aria-label="Coordinate grid"><span>⊞</span></button><button class="sky-tool-icon" data-tool="horizon" onclick="toggleHorizon()" title="Horizon" aria-label="Horizon"><span>⌒</span></button><button class="sky-tool-icon" data-tool="rotate" onclick="toggleRotateMode()" title="Rotate mode" aria-label="Rotate mode"><span>⟳</span></button><button class="sky-tool-icon" data-tool="sun" onclick="toggleSun()" title="Daylight simulation" aria-label="Daylight simulation"><span>☼</span></button><button class="sky-tool-icon" data-tool="night" id="btnNightModeHome" onclick="toggleNightMode()" title="Night vision" aria-label="Night vision"><span>☾</span></button></div>
+<div class="sky-tool-dock" id="skyToolDock" aria-label="Sky tools"><button class="sky-tool-icon" data-tool="constellations" onclick="toggleConstellations()" title="Constellations" aria-label="Constellations"><span>☆</span></button><button class="sky-tool-icon" data-tool="grid" onclick="toggleGrid()" title="Coordinate grid" aria-label="Coordinate grid"><span>⊞</span></button><button class="sky-tool-icon" data-tool="dome" onclick="toggleDomeGrid()" title="Dome grid" aria-label="Dome grid"><span>⌒</span></button><button class="sky-tool-icon" data-tool="sun" onclick="toggleSun()" title="Daylight simulation" aria-label="Daylight simulation"><span>☼</span></button><button class="sky-tool-icon" data-tool="night" id="btnNightModeHome" onclick="toggleNightMode()" title="Night vision" aria-label="Night vision"><span>☾</span></button></div>
 <canvas id="starCanvas"></canvas>
 <canvas id="starWebGLCanvas" aria-hidden="true"></canvas>
 <div class="timelapse-label" id="timelapseLabel">⏩ TIMELAPSE — --</div>
@@ -274,20 +263,20 @@
 
 <!-- LINK TO YOUR NEW JS FILE -->
 <!-- Data must load first -->
-<script src="data.js?v=320"></script>
-<script src="expanded_stars.js?v=320"></script>
+<script src="data.js?v=322"></script>
+<script src="expanded_stars.js?v=322"></script>
 <!-- Standalone features -->
-<script src="telescope.js?v=320"></script>
-<script src="observingLog.js?v=320"></script>
-<script src="api.js?v=320"></script>
+<script src="telescope.js?v=322"></script>
+<script src="observingLog.js?v=322"></script>
+<script src="api.js?v=322"></script>
 <!-- Main logic loads last to kick everything off -->
-<script src="webgl-star-renderer.js?v=320"></script>
-<script src="main.js?v=320"></script>
+<script src="webgl-star-renderer.js?v=322"></script>
+<script src="main.js?v=322"></script>
 <!-- Service Worker Registration -->
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js?v=320', { updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=322', { updateViaCache: 'none' })
                 .then(reg => {
                     console.log('StarSight Service Worker registered:', reg.scope);
                     // Ask the browser to check for a newer worker on each app load.

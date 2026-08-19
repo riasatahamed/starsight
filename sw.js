@@ -1,20 +1,20 @@
-const CACHE_NAME = 'starsight-v32';
+const CACHE_NAME = 'starsight-v35';
 
 // StarSight is a PWA, but fresh deployments should win over stale cache entries.
 // We therefore use a network-first strategy for the app shell and keep cache only
 // as an offline fallback. The worker itself is registered with updateViaCache:'none'.
 const APP_SHELL = [
   './',
-  './index.html?v=320',
-  './style.css?v=320',
-  './data.js?v=320',
-  './expanded_stars.js?v=320',
-  './telescope.js?v=320',
-  './observingLog.js?v=320',
-  './api.js?v=320',
-  './main.js?v=320',
-  './manifest.json?v=320',
-  './images/StarSight_Logo.png?v=320'
+  './index.html?v=323',
+  './style.css?v=323',
+  './data.js?v=323',
+  './expanded_stars.js?v=323',
+  './telescope.js?v=323',
+  './observingLog.js?v=323',
+  './api.js?v=323',
+  './main.js?v=323',
+  './manifest.json?v=323',
+  './images/StarSight_Logo.png?v=323'
 ];
 
 self.addEventListener('install', event => {
@@ -69,11 +69,11 @@ self.addEventListener('fetch', event => {
         .then(response => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put('./index.html?v=320', copy)).catch(() => {});
+            caches.open(CACHE_NAME).then(cache => cache.put('./index.html?v=323', copy)).catch(() => {});
           }
           return response;
         })
-        .catch(() => caches.match('./index.html?v=320').then(r => r || caches.match('./index.html')))
+        .catch(() => caches.match('./index.html?v=323').then(r => r || caches.match('./index.html')))
     );
     return;
   }
