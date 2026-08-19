@@ -462,6 +462,8 @@ let compassPermissionPending = false;
 let compassAbsoluteSeen = false;
 let compassFallbackTimer = null;
 let compassHintTimer = null;
+let compassAbsoluteSensor = null;
+let compassSensorActive = false;
 let followDevicePitch = null;
 let followDeviceRoll = null;
 let savedManualViewYaw = 0;
@@ -671,23 +673,81 @@ function getCompassHeadingFromEvent(event) {
         return ((event.webkitCompassHeading % 360) + 360) % 360;
     }
 
-    // Prefer the absolute orientation stream on Android. Ordinary
-    // deviceorientation can be relative/gyro-only and is a common source of a
-    // permanently wrong heading or competing jumps when both streams are used.
+    // Chrome/Android: when the Generic Sensor API is available, the absolute
+    // orientation sensor is the primary heading source. It is an earth-referenced
+    // fused accelerometer + gyroscope + magnetometer orientation, avoiding the
+    // device-specific alpha/screen-axis quirks seen on some Android phones.
+    if (compassSensorActive) return null;
+
+    // Legacy absolute DeviceOrientation fallback. Android alpha is already
+    // earth-referenced; do NOT add screen.orientation.angle to the compass heading.
     if ((event.absolute === true || event.type === 'deviceorientationabsolute') && Number.isFinite(event.alpha)) {
         compassAbsoluteSeen = true;
-        const orientation = Number((window.screen.orientation || {}).angle ?? window.orientation ?? 0) || 0;
-        return ((360 - event.alpha + orientation) % 360 + 360) % 360;
+        return ((360 - event.alpha) % 360 + 360) % 360;
     }
 
-    // Only use the ordinary stream as a fallback if no absolute stream appeared
-    // shortly after activation. This prevents two sensor sources fighting each
-    // other on Android Chrome.
+    // Only use the ordinary stream as a last fallback if no absolute stream appears.
     if (!compassAbsoluteSeen && compassFallbackTimer === null && Number.isFinite(event.alpha)) {
-        const orientation = Number((window.screen.orientation || {}).angle ?? window.orientation ?? 0) || 0;
-        return ((360 - event.alpha + orientation) % 360 + 360) % 360;
+        return ((360 - event.alpha) % 360 + 360) % 360;
     }
     return null;
+}
+
+function applyAbsoluteCompassQuaternion(quaternion) {
+    if (!quaternion || quaternion.length < 4) return;
+    const x = Number(quaternion[0]), y = Number(quaternion[1]);
+    const z = Number(quaternion[2]), w = Number(quaternion[3]);
+    if (![x,y,z,w].every(Number.isFinite)) return;
+
+    // AbsoluteOrientationSensor uses the Earth frame: X=east, Y=north, Z=up.
+    // Rotate the phone's local +Y (top edge) into that frame, then derive the
+    // clockwise bearing from north. This remains correct in portrait/landscape
+    // because the sensor uses the physical device frame, not the screen frame.
+    const east  = 2 * (x * y - w * z);
+    const north = 1 - 2 * (x * x + z * z);
+    if (Math.abs(east) < 1e-6 && Math.abs(north) < 1e-6) return;
+    const heading = (Math.atan2(east, north) * 180 / Math.PI + 360) % 360;
+    compassAbsoluteSeen = true;
+    applyCompassHeading(heading);
+}
+
+function startAbsoluteCompassSensor() {
+    compassSensorActive = false;
+    compassAbsoluteSensor = null;
+    if (!('AbsoluteOrientationSensor' in window)) return false;
+    try {
+        const sensor = new AbsoluteOrientationSensor({ frequency: 30, referenceFrame: 'device' });
+        sensor.addEventListener('reading', () => {
+            if (!compassModeActive || arMode) return;
+            applyAbsoluteCompassQuaternion(sensor.quaternion);
+            if (Number.isFinite(smoothCompassHeading)) {
+                updateCompassDialVisual();
+                requestAnimationFrame(drawMap);
+            }
+        });
+        sensor.addEventListener('error', (event) => {
+            console.warn('AbsoluteOrientationSensor error:', event.error || event);
+            compassSensorActive = false;
+            compassAbsoluteSensor = null;
+        });
+        sensor.start();
+        compassAbsoluteSensor = sensor;
+        compassSensorActive = true;
+        return true;
+    } catch (err) {
+        console.warn('AbsoluteOrientationSensor unavailable:', err);
+        compassSensorActive = false;
+        compassAbsoluteSensor = null;
+        return false;
+    }
+}
+
+function stopAbsoluteCompassSensor() {
+    if (compassAbsoluteSensor) {
+        try { compassAbsoluteSensor.stop(); } catch (_) {}
+    }
+    compassAbsoluteSensor = null;
+    compassSensorActive = false;
 }
 
 function applyCompassHeading(heading) {
@@ -833,6 +893,7 @@ function showCompassHintOnce() {
 }
 
 function stopCompassAlignment(resetSky = true) {
+    stopAbsoluteCompassSensor();
     compassModeActive = false;
     compassHeading = null;
     smoothCompassHeading = null;
@@ -878,15 +939,19 @@ function startCompassAlignment() {
         window.removeEventListener('deviceorientationabsolute', processCompassOrientation, true);
         compassAbsoluteSeen = false;
         compassFallbackTimer = null;
-        window.addEventListener('deviceorientationabsolute', processCompassOrientation, true);
-        window.addEventListener('deviceorientation', processCompassOrientation, true);
-        // Prefer calibrated absolute orientation/compass. Permit the ordinary
-        // stream only after the short grace period if no absolute stream appears.
-        compassFallbackTimer = setTimeout(() => {
-            compassFallbackTimer = null;
-        }, 1200);
         compassPermissionPending = false;
         compassModeActive = true;
+
+        // Prefer the fused absolute orientation sensor on modern Android Chrome.
+        // If it cannot start, fall back to deviceorientationabsolute.
+        const absoluteSensorStarted = startAbsoluteCompassSensor();
+        if (!absoluteSensorStarted) {
+            window.addEventListener('deviceorientationabsolute', processCompassOrientation, true);
+            window.addEventListener('deviceorientation', processCompassOrientation, true);
+            compassFallbackTimer = setTimeout(() => {
+                compassFallbackTimer = null;
+            }, 1200);
+        }
         // Device-follow is a sighting mode: use a wide, stable ~94° field so the
         // direction the phone points at sits at the centre while nearby stars keep
         // their correct relative angular spacing on screen.
