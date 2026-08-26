@@ -1,0 +1,36 @@
+/* ===== IMMERSIVE EDGE-TO-EDGE MILKY WAY ===== */
+.page-galaxy{padding:0!important;height:100dvh;min-height:100dvh;overflow:hidden;background:#06152f!important;}
+.page-galaxy::before{display:none!important;}
+.page-galaxy .galaxy-shell{position:absolute;inset:0;width:100%;height:100%;min-height:100%;margin:0;border:0;border-radius:0;overflow:hidden;background:#071b38;box-shadow:none;isolation:isolate;}
+#galaxyCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none;background:#071b38;}
+#galaxyCanvas.dragging{cursor:grabbing}
+.galaxy-overlay{position:absolute;z-index:4;pointer-events:none}
+.galaxy-overlay button{pointer-events:auto}
+.galaxy-overlay-left{left:28px;top:88px;display:flex;flex-direction:column;gap:8px;}
+.galaxy-control{width:44px;height:44px;padding:0;border:1px solid rgba(190,215,255,.16);border-radius:14px;background:rgba(3,7,14,.30);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:rgba(225,237,255,.62);font:500 20px/1 'Space Grotesk',sans-serif;display:grid;place-items:center;cursor:pointer;transition:.2s;box-shadow:0 10px 35px rgba(0,0,0,.22);}
+.galaxy-control:hover,.galaxy-control.active{color:#fff;border-color:rgba(210,230,255,.35);background:rgba(9,16,29,.48);transform:translateY(-1px);box-shadow:0 14px 42px rgba(0,0,0,.34),0 0 22px rgba(110,170,255,.08);}
+.galaxy-overlay-bottom{left:28px;right:28px;bottom:22px;display:flex;justify-content:center;pointer-events:none;}
+.galaxy-gesture{padding:8px 12px;border:1px solid rgba(190,215,255,.09);border-radius:11px;background:rgba(2,5,10,.22);backdrop-filter:blur(10px);color:rgba(225,235,250,.25);font:500 8px/1 'IBM Plex Mono',monospace;letter-spacing:.12em;}
+.galaxy-loading{position:absolute;z-index:8;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.72);backdrop-filter:blur(3px);transition:opacity .4s,visibility .4s;}
+.galaxy-loading.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.galaxy-spinner{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.10);border-top-color:rgba(210,230,255,.8);animation:galaxy-spin .8s linear infinite;}
+@keyframes galaxy-spin{to{transform:rotate(360deg)}}
+@media(max-width:800px){.galaxy-overlay-left{left:13px;top:70px}.galaxy-control{width:42px;height:42px;border-radius:13px}.galaxy-overlay-bottom{left:12px;right:12px;bottom:16px}.galaxy-gesture{font-size:7px}}
+
+/* v35: true edge-to-edge galaxy viewport — no content-box overflow or side gutters. */
+html, body { width:100%; min-width:100%; margin:0; overflow-x:hidden!important; }
+.dashboard.app-pages { width:100vw!important; max-width:none!important; margin:0!important; padding:0!important; overflow:hidden!important; }
+.page-galaxy { position:fixed!important; inset:0!important; width:100vw!important; height:100dvh!important; min-height:100dvh!important; padding:0!important; margin:0!important; overflow:hidden!important; box-sizing:border-box!important; }
+.page-galaxy .galaxy-shell { position:absolute!important; inset:0!important; width:100%!important; height:100%!important; max-width:none!important; margin:0!important; padding:0!important; border:0!important; border-radius:0!important; box-sizing:border-box!important; }
+.page-galaxy #galaxyCanvas { position:absolute!important; inset:0!important; width:100%!important; height:100%!important; max-width:none!important; box-sizing:border-box!important; }
+.page-galaxy .galaxy-page-head, .page-galaxy .galaxy-note { display:none!important; }
+
+
+/* v38: contextual Milky Way feature tooltips */
+.galaxy-tooltip{position:absolute;z-index:10;display:none;min-width:220px;max-width:min(340px,calc(100vw - 32px));padding:12px 14px;border:1px solid rgba(190,215,255,.22);border-radius:14px;background:rgba(4,10,22,.78);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 14px 45px rgba(0,0,0,.42),0 0 30px rgba(90,150,255,.08);color:rgba(232,241,255,.94);pointer-events:none;transform:translate(12px,12px);font:400 12px/1.55 'Inter',system-ui,sans-serif;}
+.galaxy-tooltip.visible{display:block;}
+.galaxy-tooltip .tt-title{font:600 13px/1.25 'Space Grotesk',sans-serif;color:#fff;margin-bottom:4px;letter-spacing:.01em;}
+.galaxy-tooltip .tt-meta{font:500 9px/1.35 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:rgba(178,210,255,.62);margin-bottom:6px;}
+.galaxy-tooltip .tt-copy{color:rgba(222,232,247,.76);}
+.galaxy-tooltip .tt-distance{margin-top:7px;color:rgba(186,216,255,.88);font:500 10px/1.4 'IBM Plex Mono',monospace;}
+@media(max-width:800px){.galaxy-tooltip{position:fixed;left:14px!important;right:14px;bottom:18px;top:auto!important;transform:none;min-width:0;max-width:none;width:auto;padding:13px 15px;}}

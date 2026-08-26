@@ -1845,3 +1845,41 @@ body.fullscreen-active .panel-map {
 }
 .sky-compass.follow-device { border-color:rgba(120,205,255,.55) !important; box-shadow:inset 0 0 28px rgba(70,180,255,.16),0 0 20px rgba(70,180,255,.12) !important; }
 @media(max-width:1024px){ .sky-compass{ transform:scale(.92) !important; transform-origin:top left !important; } }
+
+
+/* StarSight 323 — small-body observing layer */
+.panel-small-bodies { grid-column: span 4; }
+.small-body-status { font:500 8px/1 'IBM Plex Mono',monospace; letter-spacing:.08em; color:rgba(140,220,255,.58); }
+.small-body-row { display:flex; align-items:center; gap:12px; padding:13px 16px; margin-bottom:10px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); border-top-color:rgba(255,255,255,.1); border-radius:14px; transition:.25s; }
+.small-body-row:hover { background:rgba(255,255,255,.07); transform:translateX(4px); border-color:rgba(255,255,255,.18); }
+.small-body-row:last-child { margin-bottom:0; }
+.small-body-symbol { width:30px; flex:0 0 30px; text-align:center; font-size:1.25rem; }
+.small-body-info { flex:1; min-width:0; }
+.small-body-name { color:#fff; font-size:.92rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.small-body-meta { color:var(--text-dim); font:500 .69rem/1.5 'IBM Plex Mono',monospace; margin-top:3px; }
+.small-body-badge { font:600 .62rem/1 'IBM Plex Mono',monospace; letter-spacing:.05em; text-transform:uppercase; padding:5px 8px; border-radius:8px; white-space:nowrap; background:rgba(0,240,255,.09); color:#8ceaff; border:1px solid rgba(0,240,255,.18); }
+.small-body-badge.faint { color:var(--text-faint); background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.08); }
+.small-body-empty { color:var(--text-faint); font-size:.78rem; padding:16px; text-align:center; }
+.small-body-note { margin-top:10px; color:var(--text-faint); font:400 .65rem/1.5 'IBM Plex Mono',monospace; }
+.small-body-map-label { pointer-events:none; }
+@media(max-width:1024px){ .panel-small-bodies{grid-column:span 6;} }
+@media(max-width:640px){ .panel-small-bodies{grid-column:span 12!important;} }
+
+/* Dynamic sky-object layer: restrained instrument-like visual language. */
+.small-body-status{white-space:nowrap}
+.small-body-row .small-body-meta{letter-spacing:.01em}
+
+
+/* Dynamic sky-object controls: compact, instrument-like, not visually dominant. */
+.small-body-row{display:flex;align-items:center;gap:9px;min-width:0}
+.small-body-find{margin-left:auto;flex:0 0 auto;border:1px solid rgba(140,210,255,.22);background:rgba(100,170,220,.08);color:rgba(205,235,255,.9);border-radius:7px;padding:5px 7px;font:600 8px "IBM Plex Mono",monospace;letter-spacing:.05em;cursor:pointer}
+.small-body-find:hover{background:rgba(100,170,220,.16);border-color:rgba(140,210,255,.4)}
+
+/* v34 layout safety: keep the StarSight chrome fixed above every SPA page. */
+.cinema-topbar{position:fixed!important;top:0!important;left:0!important;right:0!important;height:72px!important;z-index:5000!important;transform:none;}
+.dashboard.app-pages{position:relative!important;display:block!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;}
+.app-page{width:100%!important;min-height:100dvh!important;}
+.page-galaxy{padding-top:100px!important;}
+.page-galaxy .galaxy-page-head,.page-galaxy .galaxy-shell,.page-galaxy .galaxy-note{max-width:1160px;margin-left:auto;margin-right:auto;}
+.page-galaxy .galaxy-page-head{position:relative;z-index:4;}
+@media(max-width:800px){.cinema-topbar{height:60px!important}.page-galaxy{padding-top:78px!important}.page-galaxy .galaxy-shell{width:100%;}}

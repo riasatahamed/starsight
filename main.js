@@ -376,6 +376,7 @@ let livePressure = 1010; // Standard 10 hPa default
 // Telescope sync/slewing always uses true real time regardless of this offset.
 let timeOffsetMinutes = 0;
 function getSimTime() { return new Date(Date.now() + timeOffsetMinutes * 60000); }
+
 let timelapseActive = false;
 let timelapseIntervalId = null;
 let timelapseRafId = null;
@@ -472,6 +473,14 @@ let isInteracting = false;
 const FOLLOW_DEVICE_ZOOM = 1.35; // ~94° horizontal field on the default stereographic sky camera.
 let savedManualZoom = 1;
 let compassGlobeLastPose = '';
+
+// --- FIND OBJECT NAVIGATION ---
+// Find is intentionally kept inside the existing SPA/camera state.  The Explore
+// page only requests a target; the Sky page remains the same renderer and the
+// camera is animated in-place.
+let dynamicFindAnimation = null;
+let dynamicFindTarget = null;
+let dynamicFindPulse = null; // short-lived visual acquisition animation
 
 // --- ASTRONOMICAL POSITION UPDATE THROTTLE ---
 // Recomputing RA/Dec -> Alt/Az (precession + refraction) for every star, Milky Way
@@ -2689,24 +2698,14 @@ function buildStarLodLists() {
 }
 buildStarLodLists();
 
-// GPU star renderer: the existing Canvas 2D renderer remains the automatic fallback.
-try {
-    if (typeof createStarSightWebGLRenderer === 'function' && starWebGLCanvas) {
-        starWebGLRenderer = createStarSightWebGLRenderer(starWebGLCanvas);
-        if (starWebGLRenderer) {
-            starWebGLRenderer.uploadStars(ALL_STARS);
-            starWebGLEnabled = true;
-            starWebGLCanvas.classList.add('webgl-ready');
-            console.log('✨ StarSight WebGL2 star renderer enabled.');
-        }
-    }
-} catch (e) {
-    console.warn('StarSight WebGL2 renderer failed; using Canvas 2D fallback.', e);
-    starWebGLRenderer = null;
-    starWebGLEnabled = false;
-    if (starWebGLCanvas) starWebGLCanvas.classList.remove('webgl-ready');
-    if (canvas) canvas.classList.add('sky-ready');
-}
+// Stable sky path: keep the proven Canvas 2D renderer as the primary star field.
+// The optional WebGL layer remains available in the source but is intentionally
+// disabled here so optional dynamic-object overlays can never be hidden behind
+// or affected by a GPU rendering failure on a mobile browser.
+starWebGLEnabled = false;
+starWebGLRenderer = null;
+if (starWebGLCanvas) starWebGLCanvas.classList.remove('webgl-ready');
+if (canvas) canvas.classList.add('sky-ready');
 
 function getWebGLStarLodMag(mobile, moving, zoom) {
     const tiers = moving
@@ -4063,6 +4062,327 @@ function drawMap() {
         ctx.textAlign = 'center';
         ctx.fillText('Star map unavailable', canvas.width / Math.min(window.devicePixelRatio, 2) / 2, canvas.height / Math.min(window.devicePixelRatio, 2) / 2);
     }
+    // --- DYNAMIC SKY OBJECTS (SAFE OVERLAY) ---
+    // This layer is deliberately isolated from the core star/planet renderer.
+    // If any small-body data is malformed, the normal sky map continues rendering.
+    try {
+        const bodies = Array.isArray(window.STARSIGHT_SMALL_BODIES) ? window.STARSIGHT_SMALL_BODIES : [];
+        const showers = Array.isArray(window.STARSIGHT_METEOR_SHOWERS) ? window.STARSIGHT_METEOR_SHOWERS : [];
+        const bodyNow = getSimTime();
+        // Dynamic objects are rendered in their own overlay scope. Do not rely
+        // on drawMap()'s local renderedLocation variable here; doing so throws
+        // and the safety catch aborts the entire comet/asteroid layer.
+        const bodyRenderedLocation = getRenderedObserverLocation();
+        const bodyObserver = new Astronomy.Observer(
+            bodyRenderedLocation.lat,
+            bodyRenderedLocation.lon,
+            0
+        );
+        const bodyAstroTime = Astronomy.MakeTime(bodyNow);
+        const cometTargets = [];
+        const asteroidTargets = [];
+        const showerTargets = [];
+
+        // Expose the exact screen-space positions used by the renderer so
+        // pointer/touch hit-testing can use the same coordinates. Previously
+        // these targets existed only as local arrays, so checkTooltip() could
+        // never see a comet or asteroid.
+        const dynamicTargets = window.STARSIGHT_DYNAMIC_RENDER_TARGETS ||
+            (window.STARSIGHT_DYNAMIC_RENDER_TARGETS = []);
+        dynamicTargets.length = 0;
+
+        for (const b of bodies) {
+            if (!Number.isFinite(b.ra) || !Number.isFinite(b.dec)) continue;
+            const h = Astronomy.Horizon(bodyAstroTime, bodyObserver, b.ra / 15, b.dec, dynamicRefraction);
+            if (!(h.altitude > 0)) continue;
+            const q = projectAz(h.altitude, h.azimuth);
+            if (!q || !q.onScreen || !(q.z3d > 0)) continue;
+            const item = { ...b, ...q, alt:h.altitude, az:h.azimuth };
+            dynamicTargets.push(item);
+            if (b.kind === 'comet') cometTargets.push(item);
+            else asteroidTargets.push(item);
+        }
+
+        for (const sh of showers) {
+            if (!Number.isFinite(sh.radiantRa) || !Number.isFinite(sh.radiantDec)) continue;
+            const h = Astronomy.Horizon(bodyAstroTime, bodyObserver, sh.radiantRa / 15, sh.radiantDec, dynamicRefraction);
+            if (!(h.altitude > 3)) continue;
+            const q = projectAz(h.altitude, h.azimuth);
+            if (!q || !q.onScreen || !(q.z3d > 0)) continue;
+            const d = bodyNow.getUTCDate();
+            const start = new Date(Date.UTC(bodyNow.getUTCFullYear(),0,0));
+            const doy = Math.floor((Date.UTC(bodyNow.getUTCFullYear(),bodyNow.getUTCMonth(),d)-start.getTime())/86400000);
+            const active = doy >= sh.startDOY && doy <= sh.endDOY;
+            showerTargets.push({ ...sh, ...q, alt:h.altitude, az:h.azimuth, active });
+        }
+
+        // Comets: restrained cyan coma + tail directed approximately away from the Sun.
+        let sunPoint = null;
+        try {
+            const sunEq = Astronomy.Equator(Astronomy.Body.Sun, bodyAstroTime, bodyObserver, true, true);
+            const sunHor = Astronomy.Horizon(bodyAstroTime, bodyObserver, sunEq.ra, sunEq.dec, dynamicRefraction);
+            if (sunHor.altitude > 0) sunPoint = projectAz(sunHor.altitude, sunHor.azimuth);
+        } catch (_) {}
+        cometTargets.forEach((c) => {
+            // A real comet is a stellar-looking point surrounded by a very faint
+            // diffuse coma. The tail is subtle and directional rather than a
+            // bright UI streak. Increase scale gently with zoom so it remains
+            // recognizable without looking like a cartoon object.
+            const zoom = Math.max(0.75, visualZoomLevel);
+            const bright = Number.isFinite(c.mag) ? Math.max(0.18, Math.min(1, (12 - c.mag) / 5)) : .35;
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.globalCompositeOperation = 'lighter';
+
+            let ang = -0.35;
+            if (sunPoint && sunPoint.onScreen) {
+                ang = Math.atan2(c.y - sunPoint.y, c.x - sunPoint.x);
+            }
+
+            const tailLen = Math.min(34, (7 + Math.max(0, 10 - (c.mag || 10)) * 2) * Math.min(zoom, 1.4));
+            const ca = Math.cos(ang), sa = Math.sin(ang);
+
+            // Broad, almost invisible dust tail.
+            const dust = ctx.createLinearGradient(0, 0, ca * tailLen, sa * tailLen);
+            dust.addColorStop(0, `rgba(210,238,255,${0.24 * bright})`);
+            dust.addColorStop(0.35, `rgba(180,225,255,${0.10 * bright})`);
+            dust.addColorStop(1, 'rgba(140,205,255,0)');
+            ctx.strokeStyle = dust;
+            ctx.lineWidth = Math.max(1.1, 2.2 * Math.min(zoom, 1.5));
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(ca * tailLen, sa * tailLen);
+            ctx.stroke();
+
+            // Narrow ion-tail-like filament.
+            const ion = ctx.createLinearGradient(0, 0, ca * tailLen * .9, sa * tailLen * .9);
+            ion.addColorStop(0, `rgba(220,250,255,${0.48 * bright})`);
+            ion.addColorStop(1, 'rgba(120,210,255,0)');
+            ctx.strokeStyle = ion;
+            ctx.lineWidth = Math.max(.45, .75 * Math.min(zoom, 1.5));
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(ca * tailLen * .9, sa * tailLen * .9);
+            ctx.stroke();
+
+            // Soft coma: radial glow + compact stellar nucleus.
+            const comaR = Math.max(2.2, 3.2 * Math.min(zoom, 1.5));
+            const coma = ctx.createRadialGradient(0, 0, 0, 0, 0, comaR);
+            coma.addColorStop(0, `rgba(245,252,255,${0.72 * bright})`);
+            coma.addColorStop(.18, `rgba(210,240,255,${0.38 * bright})`);
+            coma.addColorStop(.65, `rgba(160,220,255,${0.12 * bright})`);
+            coma.addColorStop(1, 'rgba(120,200,255,0)');
+            ctx.fillStyle = coma;
+            ctx.beginPath();
+            ctx.arc(0, 0, comaR, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 5 * zoom;
+            ctx.shadowColor = `rgba(190,235,255,${0.65 * bright})`;
+            ctx.fillStyle = `rgba(245,252,255,${0.9 * bright})`;
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.max(.7, .95 * Math.min(zoom, 1.5)), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // Names are kept for genuinely bright comets only; ordinary stars
+            // should still dominate the natural-looking sky.
+            if (c.mag <= 8.5) {
+                ctx.save();
+                ctx.globalAlpha = .62;
+                ctx.font = '500 8px "IBM Plex Mono",monospace';
+                ctx.fillStyle = 'rgba(205,235,255,.9)';
+                ctx.fillText(c.name, c.x + 9, c.y - 7);
+                ctx.restore();
+            }
+        });
+
+        // Asteroids/NEOs are unresolved point sources in a normal sky view:
+        // render them like very faint stars, not like giant crosshairs.
+        asteroidTargets.forEach(a => {
+            const isNeo = a.kind === 'neo';
+            const zoom = Math.max(.8, visualZoomLevel);
+            const mag = Number.isFinite(a.mag) ? a.mag : 12;
+            const visibility = Math.max(.18, Math.min(.9, (14 - mag) / 5));
+            const r = Math.max(.8, (isNeo ? 1.35 : 1.05) * Math.min(zoom, 2));
+
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = visibility;
+            ctx.shadowBlur = (isNeo ? 4 : 2.5) * zoom;
+            ctx.shadowColor = isNeo ? 'rgba(255,185,120,.55)' : 'rgba(220,235,255,.45)';
+            ctx.fillStyle = isNeo ? 'rgba(255,205,150,.92)' : 'rgba(225,235,250,.9)';
+            ctx.beginPath();
+            ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            // A microscopic diffraction-like glint only for brighter targets; no persistent NEO ring.
+            if (mag <= 10) {
+                ctx.globalAlpha = visibility * .32;
+                ctx.strokeStyle = isNeo ? 'rgba(255,190,125,.7)' : 'rgba(220,235,255,.55)';
+                ctx.lineWidth = .55;
+                const gl = 2.8 * Math.min(zoom, 1.7);
+                ctx.beginPath();
+                ctx.moveTo(a.x - gl, a.y); ctx.lineTo(a.x + gl, a.y);
+                ctx.moveTo(a.x, a.y - gl); ctx.lineTo(a.x, a.y + gl);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            if (isNeo) {
+                ctx.save();
+                ctx.globalAlpha = .55;
+                ctx.font = '500 8px "IBM Plex Mono",monospace';
+                ctx.fillStyle = 'rgba(255,205,150,.88)';
+                ctx.fillText(a.name, a.x + 7, a.y - 6);
+                ctx.restore();
+            }
+        });
+
+        // ISS: live topocentric position from the same observer used by the sky map.
+        // The tracker API supplies the spacecraft's geodetic ground position and altitude;
+        // convert that state into local ENU coordinates, then project through the exact same
+        // 3D camera as stars and planets.
+        const iss = window.STARSIGHT_ISS;
+        if (iss && Number.isFinite(iss.latitude) && Number.isFinite(iss.longitude) && Number.isFinite(iss.altitude)) {
+            const toRad = d => d * Math.PI / 180;
+            const Rearth = 6371;
+            const olat = toRad(renderedLocation.lat), olon = toRad(renderedLocation.lon);
+            const ilat = toRad(iss.latitude), ilon = toRad(iss.longitude);
+            const r1 = Rearth, r2 = Rearth + iss.altitude;
+            const p1 = {x:r1*Math.cos(olat)*Math.cos(olon), y:r1*Math.cos(olat)*Math.sin(olon), z:r1*Math.sin(olat)};
+            const p2 = {x:r2*Math.cos(ilat)*Math.cos(ilon), y:r2*Math.cos(ilat)*Math.sin(ilon), z:r2*Math.sin(ilat)};
+            const dx=p2.x-p1.x, dy=p2.y-p1.y, dz=p2.z-p1.z;
+            const east=-Math.sin(olon)*dx+Math.cos(olon)*dy;
+            const north=-Math.sin(olat)*Math.cos(olon)*dx-Math.sin(olat)*Math.sin(olon)*dy+Math.cos(olat)*dz;
+            const up=Math.cos(olat)*Math.cos(olon)*dx+Math.cos(olat)*Math.sin(olon)*dy+Math.sin(olat)*dz;
+            const range=Math.sqrt(east*east+north*north+up*up)||1;
+            const issAlt=Math.asin(up/range)*180/Math.PI;
+            const issAz=(Math.atan2(east,north)*180/Math.PI+360)%360;
+            const q=projectAz(issAlt,issAz);
+            if (issAlt>0 && q.onScreen && q.z3d>0) {
+                window.STARSIGHT_ISS_LAST_AZ = issAz;
+                window.STARSIGHT_ISS_LAST_ALT = issAlt;
+                ctx.save();
+                const pulse=1+0.18*Math.sin(performance.now()/220);
+                ctx.globalAlpha=.95;
+                ctx.shadowBlur=18; ctx.shadowColor='rgba(120,220,255,.95)';
+                ctx.fillStyle='rgba(220,250,255,.98)';
+                ctx.beginPath(); ctx.arc(q.x,q.y,3.2*pulse,0,Math.PI*2); ctx.fill();
+                ctx.shadowBlur=0;
+                ctx.strokeStyle='rgba(120,225,255,.9)'; ctx.lineWidth=1.4;
+                ctx.beginPath(); ctx.moveTo(q.x-9,q.y);ctx.lineTo(q.x+9,q.y);ctx.moveTo(q.x,q.y-9);ctx.lineTo(q.x,q.y+9);ctx.stroke();
+                ctx.font='700 9px "IBM Plex Mono",monospace'; ctx.fillStyle='rgba(185,240,255,.95)';
+                ctx.fillText('ISS',q.x+12,q.y-9);
+                ctx.restore();
+            }
+        }
+
+        // FIND acquisition marker. Use the SAME screen-space target that was
+        // actually rendered for the comet/asteroid whenever possible. This is
+        // deliberately independent of the normal hit-test and therefore remains
+        // visible immediately after FIND settles.
+        if (dynamicFindTarget || dynamicFindPulse) {
+            try {
+                const target = dynamicFindTarget || dynamicFindPulse;
+                let fq = null;
+
+                // Prefer the already-rendered small-body screen position.
+                const renderedTarget = dynamicTargets.find(
+                    o => o && o.name === target.name && o.onScreen && o.z3d > 0
+                );
+                if (renderedTarget) {
+                    fq = { x: renderedTarget.x, y: renderedTarget.y, onScreen: true, z3d: renderedTarget.z3d };
+                } else {
+                    const fh = Astronomy.Horizon(
+                        bodyAstroTime, bodyObserver,
+                        target.ra / 15, target.dec, dynamicRefraction
+                    );
+                    if (fh.altitude > 0) {
+                        const q = projectAz(fh.altitude, fh.azimuth);
+                        if (q && q.onScreen && q.z3d > 0) fq = q;
+                    }
+                }
+
+                if (fq) {
+                    const nowPulse = performance.now();
+                    const pulseStart = dynamicFindPulse ? dynamicFindPulse.start : nowPulse;
+                    const elapsed = Math.max(0, nowPulse - pulseStart);
+                    const duration = dynamicFindPulse ? dynamicFindPulse.duration : 2200;
+                    const t = Math.min(1, elapsed / duration);
+                    const fade = Math.pow(1 - t, 1.35);
+                    const wave = 1 - Math.abs((t * 2) % 2 - 1);
+                    const zoom = Math.max(.9, Math.min(visualZoomLevel, 1.5));
+                    const rr = (8 + 30 * wave) * zoom;
+
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'lighter';
+
+                    // Expanding "energy ring".
+                    ctx.globalAlpha = .98 * fade;
+                    ctx.strokeStyle = 'rgba(135,235,255,.98)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([3, 4]);
+                    ctx.beginPath();
+                    ctx.arc(fq.x, fq.y, rr, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // Four unmistakable pointer brackets.
+                    const arm = 9 + 4 * wave;
+                    ctx.beginPath();
+                    ctx.moveTo(fq.x - rr - arm, fq.y); ctx.lineTo(fq.x - rr + 2, fq.y);
+                    ctx.moveTo(fq.x + rr - 2, fq.y); ctx.lineTo(fq.x + rr + arm, fq.y);
+                    ctx.moveTo(fq.x, fq.y - rr - arm); ctx.lineTo(fq.x, fq.y - rr + 2);
+                    ctx.moveTo(fq.x, fq.y + rr - 2); ctx.lineTo(fq.x, fq.y + rr + arm);
+                    ctx.stroke();
+
+                    // Bright central "spark" / acquisition flash.
+                    ctx.globalAlpha = Math.min(1, .95 * fade + .25 * (1 - t));
+                    ctx.fillStyle = 'rgba(235,255,255,1)';
+                    ctx.shadowBlur = 18 * fade;
+                    ctx.shadowColor = 'rgba(100,225,255,.98)';
+                    ctx.beginPath();
+                    ctx.arc(fq.x, fq.y, 2.8 + 2.2 * wave, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Four tiny rays around the object.
+                    const ray = 7 + 7 * wave;
+                    ctx.globalAlpha = .85 * fade;
+                    ctx.lineWidth = 1.1;
+                    ctx.beginPath();
+                    ctx.moveTo(fq.x-ray, fq.y); ctx.lineTo(fq.x+ray, fq.y);
+                    ctx.moveTo(fq.x, fq.y-ray); ctx.lineTo(fq.x, fq.y+ray);
+                    ctx.stroke();
+
+                    ctx.shadowBlur = 0;
+                    ctx.globalAlpha = .9 * fade;
+                    ctx.font = '600 9px "IBM Plex Mono",monospace';
+                    ctx.fillStyle = 'rgba(210,250,255,1)';
+                    ctx.fillText(target.name.toUpperCase(), fq.x + rr + 10, fq.y - rr - 4);
+                    ctx.restore();
+
+                    if (dynamicFindPulse && t >= 1) dynamicFindPulse = null;
+                }
+            } catch (e) {
+                // Never allow the optional acquisition animation to affect the sky renderer.
+            }
+        }
+
+        // Meteor-shower radiants: soft halo + small radiant marker, only strong when active.
+        showerTargets.forEach(r => {
+            const alpha = r.active ? .78 : .16;
+            ctx.save();ctx.globalAlpha=alpha;ctx.translate(r.x,r.y);
+            ctx.strokeStyle=r.active?'rgba(255,198,105,.9)':'rgba(185,205,235,.45)';ctx.lineWidth=1;
+            ctx.setLineDash(r.active?[3,3]:[2,5]);ctx.beginPath();ctx.arc(0,0,r.active?12:8,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+            if(r.active){ctx.fillStyle='rgba(255,220,145,.95)';ctx.beginPath();ctx.arc(0,0,2,0,Math.PI*2);ctx.fill();ctx.font='600 8px "IBM Plex Mono",monospace';ctx.fillText(r.short||r.name,15,-4);}
+            ctx.restore();
+        });
+    } catch (dynamicSkyError) {
+        // Never let optional dynamic objects blank the primary sky canvas.
+        console.warn('Dynamic sky-object overlay skipped:', dynamicSkyError);
+    }
+
     // --- 3D COMPASS ---
     // The compass is a miniature of the same celestial camera. It follows manual
     // hemisphere interaction and device-follow orientation without changing the
@@ -4098,6 +4418,24 @@ function checkTooltip(clientX, clientY) {
         if (dist < closestDist) { closestDist = dist; closest = obj; }
     }
 
+    // Small bodies are rendered as genuinely tiny astronomical points, so
+    // their visual footprint is intentionally smaller than the interaction
+    // footprint. This keeps them natural-looking while making them tappable.
+    const dynamicTargets = Array.isArray(window.STARSIGHT_DYNAMIC_RENDER_TARGETS)
+        ? window.STARSIGHT_DYNAMIC_RENDER_TARGETS : [];
+    for (const obj of dynamicTargets) {
+        if (!obj || !obj.onScreen || obj.alt < 0 || !Number.isFinite(obj.x) || !Number.isFinite(obj.y)) continue;
+        const dx = mx - obj.x;
+        const dy = my - obj.y;
+        const dist = Math.hypot(dx, dy);
+        const hitRadius = obj.kind === 'comet' ? 24 : 21;
+        if (dist <= hitRadius && (!closest || dist < closestDist)) {
+            closest = obj;
+            closestDist = dist;
+            closest._dynamic = true;
+        }
+    }
+
     if (closest) {
         hoveredStar = closest;
         lastInspectedObject = closest;
@@ -4114,7 +4452,15 @@ function checkTooltip(clientX, clientY) {
         let badgeText;
         let textColor;
 
-        if (closest.isSun) {
+        if (closest.kind === 'comet' || closest.kind === 'asteroid' || closest.kind === 'neo') {
+            const kindLabel = closest.kind === 'comet' ? 'comet' : (closest.kind === 'neo' ? 'near-Earth object' : 'asteroid');
+            badgeText = kindLabel;
+            textColor = closest.kind === 'comet' ? '#bfefff' : '#ffd0a0';
+            info = closest.desc || `${kindLabel} · ${closest.name}`;
+            if (Number.isFinite(closest.mag)) info += ` · Mag ${closest.mag.toFixed(1)}`;
+            if (Number.isFinite(closest.distanceAU)) info += ` · ${closest.distanceAU.toFixed(3)} AU`;
+            if (closest.constellation) info += ` · ${closest.constellation}`;
+        } else if (closest.isSun) {
             badgeText = 'star';
             textColor = closest.c;
         } else if (closest.isMoon) {
@@ -4655,6 +5001,8 @@ updateClock();
 function updateAll() { 
     updatePlanets(); 
     drawMoon(); 
+    updateSmallBodyPanels();
+    if (typeof populateShowers === 'function') populateShowers();
     updateISSLive();
 }
 
@@ -4891,6 +5239,144 @@ function toggleNightMode() {
 
 setInterval(updateISSLive, 5000); 
 
+
+// Find a comet/asteroid using the existing single-page sky renderer.
+// The Explore page never creates a second renderer: it requests the Sky view,
+// then this function animates the existing viewYawDeg/viewPitchDeg camera.
+function findDynamicObject(name) {
+    try {
+        const bodies = Array.isArray(window.STARSIGHT_SMALL_BODIES) ? window.STARSIGHT_SMALL_BODIES : [];
+        const b = bodies.find(x => x.name === name);
+        if (!b || !Number.isFinite(b.ra) || !Number.isFinite(b.dec)) {
+            showSkyToolStatus('OBJECT POSITION UNAVAILABLE');
+            return;
+        }
+
+        const loc = getRenderedObserverLocation();
+        const observer = new Astronomy.Observer(loc.lat, loc.lon, 0);
+        const at = Astronomy.MakeTime(getSimTime());
+        const h = Astronomy.Horizon(at, observer, b.ra / 15, b.dec, dynamicRefraction);
+        if (!(h.altitude > 0)) {
+            showSkyToolStatus(`${b.name}: BELOW HORIZON`);
+            return;
+        }
+
+        // Follow Device would continuously overwrite the manual camera, so Find
+        // temporarily releases it. The user's manual pose is otherwise preserved.
+        if (compassModeActive && typeof stopCompassAlignment === 'function') {
+            stopCompassAlignment(false);
+        }
+
+        const targetYaw = ((-h.azimuth + 540) % 360) - 180;
+        const targetPitch = Math.max(-80, Math.min(80, 90 - h.altitude));
+
+        // Reveal the existing Sky page through the SPA controller. No reload, no
+        // new canvas and no second camera are involved. index.html exposes this
+        // controller as window.showStarSightPage.
+        const showSky = window.showStarSightPage;
+        if (typeof showSky === 'function') showSky('sky', true);
+        else {
+            // Fallback for older cached shells: activate the existing Sky nav item.
+            const skyNav = document.querySelector('[data-page-target="sky"]');
+            if (skyNav) skyNav.click();
+        }
+
+        // Cancel a previous Find animation and start from the camera pose that is
+        // actually visible on the Sky canvas.
+        if (dynamicFindAnimation) cancelAnimationFrame(dynamicFindAnimation);
+        dynamicFindTarget = { name: b.name, ra: b.ra, dec: b.dec, alt: h.altitude, az: h.azimuth, targetYaw, targetPitch };
+
+        const start = performance.now();
+        const startYaw = viewYawDeg;
+        const startPitch = viewPitchDeg;
+        const shortestDelta = ((targetYaw - startYaw + 540) % 360) - 180;
+        const duration = 1250;
+        const ease = t => 1 - Math.pow(1 - t, 3);
+
+        const animateFind = nowMs => {
+            const t = Math.min(1, (nowMs - start) / duration);
+            const e = ease(t);
+            viewYawDeg = ((startYaw + shortestDelta * e + 540) % 360) - 180;
+            viewPitchDeg = startPitch + (targetPitch - startPitch) * e;
+            panX = 0; panY = 0; rotateOffset = 0;
+            // drawMap() already owns the continuous RAF loop. Do not start
+            // another render loop from FIND; just update the camera pose.
+            if (t < 1) {
+                dynamicFindAnimation = requestAnimationFrame(animateFind);
+            } else {
+                dynamicFindAnimation = null;
+                viewYawDeg = targetYaw;
+                viewPitchDeg = targetPitch;
+                // drawMap() already has a permanent RAF loop. Starting it again
+                // here would create a second persistent render loop after FIND.
+                showSkyToolStatus(`${b.name} · TARGET ACQUIRED`);
+                // Start the short pointer animation only after the camera has
+                // settled. This replaces the old permanent target ring.
+                dynamicFindPulse = {
+                    name: b.name,
+                    ra: b.ra,
+                    dec: b.dec,
+                    start: performance.now(),
+                    duration: 2400
+                };
+                dynamicFindTarget = null;
+                // The normal RAF will paint this. Do not call drawMap() here:
+                // FIND must never create a second render chain.
+            }
+        };
+
+        // Wait for the SPA to make the Sky canvas measurable. This is not a page
+        // navigation dependency; it is simply one frame of layout settling.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (typeof resizeCanvas === 'function') resizeCanvas();
+            dynamicFindAnimation = requestAnimationFrame(animateFind);
+        }));
+    } catch (e) {
+        console.warn('Find dynamic object:', e);
+        showSkyToolStatus('FIND FAILED');
+    }
+}
+window.findDynamicObject = findDynamicObject;
+document.addEventListener('click', e => {
+    const btn = e.target.closest && e.target.closest('[data-find-body]');
+    if (!btn) return;
+    const name = decodeURIComponent(btn.getAttribute('data-find-body') || '');
+    findDynamicObject(name);
+});
+
+// --- DYNAMIC SMALL-BODY UI -------------------------------------------------
+function updateSmallBodyLists() {
+    try {
+        const bodies = Array.isArray(window.STARSIGHT_SMALL_BODIES) ? window.STARSIGHT_SMALL_BODIES : [];
+        const cometList = document.getElementById('cometList');
+        const asteroidList = document.getElementById('asteroidList');
+        if (!bodies.length) return;
+        const observer = new Astronomy.Observer(lat, lon, 0);
+        const at = Astronomy.MakeTime(getSimTime());
+        const renderBody = (b) => {
+            let state = 'POSITION AVAILABLE';
+            let meta = Number.isFinite(b.mag) ? `mag ${b.mag.toFixed(1)}` : 'magnitude n/a';
+            try {
+                if (Number.isFinite(b.ra) && Number.isFinite(b.dec)) {
+                    const h = Astronomy.Horizon(at, observer, b.ra/15, b.dec, dynamicRefraction);
+                    state = h.altitude > 0 ? `ABOVE HORIZON · ${h.altitude.toFixed(1)}° alt` : `BELOW HORIZON · ${Math.abs(h.altitude).toFixed(1)}°`;
+                    meta += ` · ${h.azimuth.toFixed(0)}° az`;
+                } else state = 'EPHEMERIS NEEDED';
+            } catch (_) {}
+            const symbol = b.kind === 'comet' ? '☄' : (b.kind === 'neo' ? '◉' : '•');
+            const badge = b.kind === 'neo' ? 'NEO' : (b.kind === 'comet' ? 'COMET' : 'ASTEROID');
+            return `<div class="small-body-row"><span class="small-body-symbol">${symbol}</span><div class="small-body-info"><div class="small-body-name">${b.name}</div><div class="small-body-meta">${meta} · ${state}</div></div><button type="button" class="small-body-find" data-find-body="${encodeURIComponent(b.name)}">FIND</button><span class="small-body-badge">${badge}</span></div>`;
+        };
+        const comets = bodies.filter(b=>b.kind==='comet');
+        const asteroids = bodies.filter(b=>b.kind==='asteroid'||b.kind==='neo');
+        if (cometList) cometList.innerHTML = comets.map(renderBody).join('') || '<div class="small-body-empty">No comet targets loaded.</div>';
+        if (asteroidList) asteroidList.innerHTML = asteroids.map(renderBody).join('') || '<div class="small-body-empty">No asteroid targets loaded.</div>';
+        const cs=document.getElementById('cometDataStatus'); if(cs) cs.textContent=`${comets.length} TRACKED · SKY POSITION LIVE`;
+        const as=document.getElementById('asteroidDataStatus'); if(as) as.textContent=`${asteroids.length} TRACKED · SKY POSITION LIVE`;
+    } catch(e) { console.warn('Small-body UI update:',e); }
+}
+
+updateSmallBodyLists();
 populateShowers();
 fetchWeather();
 fetchAPOD();

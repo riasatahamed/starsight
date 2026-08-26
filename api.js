@@ -49,6 +49,8 @@ async function fetchSuggestions(query) {
         const searchQuery = query.includes(',') ? query.split(',')[0].trim() : query;
         const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=10&language=en&format=json`);
         const data = await res.json();
+        window.STARSIGHT_ISS = { latitude:Number(data.latitude), longitude:Number(data.longitude), altitude:Number(data.altitude)||408, velocity:Number(data.velocity)||0, timestamp:Date.now() };
+        if (typeof window.drawMap === 'function') window.drawMap();
         if (!data.results || data.results.length === 0) { suggestionsBox.classList.remove('visible'); return; }
         suggestionsBox.innerHTML = '';
         data.results.forEach((r, i) => {
@@ -97,6 +99,8 @@ async function searchCity() {
         const searchQuery = input.includes(',') ? input.split(',')[0].trim() : input;
         const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=5&language=en&format=json`);
         const data = await res.json();
+        window.STARSIGHT_ISS = { latitude:Number(data.latitude), longitude:Number(data.longitude), altitude:Number(data.altitude)||408, velocity:Number(data.velocity)||0, timestamp:Date.now() };
+        if (typeof window.drawMap === 'function') window.drawMap();
         if (!data.results || data.results.length === 0) {
             status.textContent = 'No city found. Try searching just the city name.';
             status.className = 'search-status error';
@@ -131,6 +135,8 @@ async function reverseGeocode(latVal, lonVal) {
     try {
         const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latVal}&longitude=${lonVal}&localityLanguage=en`);
         const data = await res.json();
+        window.STARSIGHT_ISS = { latitude:Number(data.latitude), longitude:Number(data.longitude), altitude:Number(data.altitude)||408, velocity:Number(data.velocity)||0, timestamp:Date.now() };
+        if (typeof window.drawMap === 'function') window.drawMap();
         const place = data.city || data.locality;
         if (!place) return null;
         const parts = [place];
@@ -195,6 +201,8 @@ async function fetchWeather() {
         // Added surface_pressure to the API request
         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,cloud_cover,visibility,surface_pressure&daily=sunrise,sunset&timezone=auto`);
         const data = await res.json();
+        window.STARSIGHT_ISS = { latitude:Number(data.latitude), longitude:Number(data.longitude), altitude:Number(data.altitude)||408, velocity:Number(data.velocity)||0, timestamp:Date.now() };
+        if (typeof window.drawMap === 'function') window.drawMap();
         
         // Update live environmental globals for the refraction engine
         liveTemp = data.current.temperature_2m || 10;
@@ -222,37 +230,47 @@ async function fetchWeather() {
 async function updateISSLive() {
     const list = document.getElementById('issList');
     try {
-        const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+        const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544', { cache: 'no-store' });
         if (!res.ok) throw new Error('API Error');
         const data = await res.json();
-        
+        window.STARSIGHT_ISS = { latitude:Number(data.latitude), longitude:Number(data.longitude), altitude:Number(data.altitude)||408, velocity:Number(data.velocity)||0, timestamp:Date.now() };
+        if (typeof window.drawMap === 'function') window.drawMap();
+        const obsLat = Number(window.lat ?? 24.83), obsLon = Number(window.lon ?? 88.05);
+        const R = 6371, altKm = Number(data.altitude)||408;
+        const toRad=d=>d*Math.PI/180;
+        const lat1=toRad(obsLat), lon1=toRad(obsLon), lat2=toRad(data.latitude), lon2=toRad(data.longitude);
+        const r1=R, r2=R+altKm;
+        const p1={x:r1*Math.cos(lat1)*Math.cos(lon1),y:r1*Math.cos(lat1)*Math.sin(lon1),z:r1*Math.sin(lat1)};
+        const p2={x:r2*Math.cos(lat2)*Math.cos(lon2),y:r2*Math.cos(lat2)*Math.sin(lon2),z:r2*Math.sin(lat2)};
+        const dx=p2.x-p1.x,dy=p2.y-p1.y,dz=p2.z-p1.z;
+        const east=-Math.sin(lon1)*dx+Math.cos(lon1)*dy;
+        const north=-Math.sin(lat1)*Math.cos(lon1)*dx-Math.sin(lat1)*Math.sin(lon1)*dy+Math.cos(lat1)*dz;
+        const up=Math.cos(lat1)*Math.cos(lon1)*dx+Math.cos(lat1)*Math.sin(lon1)*dy+Math.sin(lat1)*dz;
+        const range=Math.sqrt(east*east+north*north+up*up)||1;
+        const alt=Math.asin(up/range)*180/Math.PI;
+        const az=(Math.atan2(east,north)*180/Math.PI+360)%360;
+        const compass=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(az/22.5)%16];
         list.innerHTML = `
-            <div class="iss-row">
-                <div><div class="iss-time">Position</div><div class="iss-meta">${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°</div></div>
-                <div class="iss-mag">${data.altitude.toFixed(1)} km alt</div>
-            </div>
-            <div class="iss-row">
-                <div><div class="iss-time">Velocity</div><div class="iss-meta">Orbital Speed</div></div>
-                <div class="iss-mag">${data.velocity.toFixed(0)} km/h</div>
-            </div>
-        `;
+            <div class="iss-row"><div><div class="iss-time">ISS · ${alt>=0?alt.toFixed(1)+'° alt':'below horizon'}</div><div class="iss-meta">${az.toFixed(0)}° ${compass} · ${range.toFixed(0)} km away</div></div><div class="iss-mag">${alt>=0?'ABOVE':'BELOW'}</div></div>
+            <div class="iss-row"><div><div class="iss-time">Ground position</div><div class="iss-meta">${data.latitude.toFixed(2)}°, ${data.longitude.toFixed(2)}°</div></div><div class="iss-mag">${altKm.toFixed(0)} km</div></div>
+            <div class="iss-row"><div><div class="iss-time">Orbital speed</div><div class="iss-meta">Live telemetry</div></div><div class="iss-mag">${data.velocity.toFixed(0)} km/h</div></div>`;
     } catch (e) {
         list.innerHTML = '<div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Failed to load live ISS data</div>';
     }
 }
+
 // ----------------------------------
 
 function populateShowers() {
-    const list = document.getElementById('showerList');
-    const s = [
-        {n:'Perseids',p:'Aug 12',r:'100/hr'},{n:'Geminids',p:'Dec 13',r:'120/hr'},
-        {n:'Quadrantids',p:'Jan 3',r:'120/hr'},{n:'Lyrids',p:'Apr 22',r:'18/hr'},
-        {n:'Orionids',p:'Oct 21',r:'20/hr'},{n:'Leonids',p:'Nov 17',r:'15/hr'},
-    ];
-    s.forEach(sh => {
-        const d = document.createElement('div');
-        d.className = 'shower-row';
-        d.innerHTML = `<div><div class="shower-name">${sh.n}</div><div class="shower-when">Peak ${sh.p}</div></div><div class="shower-rate">${sh.r}</div>`;
+    const list=document.getElementById('showerList'); if(!list)return;
+    const showers=window.STARSIGHT_METEOR_SHOWERS||[];
+    const now=getSimTime(); const y=now.getUTCFullYear(), md=now.getUTCMonth()+1, day=now.getUTCDate();
+    const dayOfYear=Math.floor((Date.UTC(y,md-1,day)-Date.UTC(y,0,0))/86400000);
+    list.innerHTML='';
+    showers.slice().sort((a,b)=>Number(b.active)-Number(a.active)).forEach(s=>{
+        const active=dayOfYear>=s.startDOY && dayOfYear<=s.endDOY;
+        const d=document.createElement('div'); d.className='shower-row';
+        d.innerHTML=`<div style="flex:1"><div class="shower-name">${s.name}</div><div class="shower-when">${active?'Active now':'Peak '+s.peakLabel} · Radiant ${s.radiantLabel}</div></div><div class="shower-rate">${s.zhr}/hr</div>`;
         list.appendChild(d);
     });
 }
@@ -263,6 +281,8 @@ async function fetchAPOD() {
        const res = await fetch('data/apod.json');
         if (!res.ok) throw new Error('Failed to load APOD');
         const data = await res.json();
+        window.STARSIGHT_ISS = { latitude:Number(data.latitude), longitude:Number(data.longitude), altitude:Number(data.altitude)||408, velocity:Number(data.velocity)||0, timestamp:Date.now() };
+        if (typeof window.drawMap === 'function') window.drawMap();
         renderAPOD(data);
     } catch (e) {
         container.innerHTML = `<div style="padding:40px;text-align:center;background:rgba(255,255,255,0.02);border-radius:20px;border:1px solid rgba(255,255,255,0.05);"><div style="font-size:2.5rem;margin-bottom:12px;filter:drop-shadow(0 0 10px rgba(255,255,255,0.3));">🌌</div><div style="color:var(--text-dim);font-size:1rem;margin-bottom:12px;">NASA APOD is temporarily unavailable</div><a href="https://apod.nasa.gov/apod/astropix.html" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.9rem;text-decoration:none;">View today's picture on NASA →</a></div>`;

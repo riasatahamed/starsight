@@ -14,28 +14,29 @@
 <!-- Open Graph -->
 <meta content="StarSight" property="og:title"/>
 <meta content="A precise telescope navigation and astronomy companion." property="og:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=322" property="og:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=332" property="og:image"/>
 <meta content="https://riasatahamed.github.io/starsight/" property="og:url"/>
 <meta content="website" property="og:type"/>
 <!-- Twitter / X -->
 <meta content="summary_large_image" name="twitter:card"/>
 <meta content="StarSight" name="twitter:title"/>
 <meta content="A precise telescope navigation and astronomy companion." name="twitter:description"/>
-<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=322" name="twitter:image"/>
+<meta content="https://riasatahamed.github.io/starsight/images/StarSight_Logo.png?v=332" name="twitter:image"/>
 <!-- Favicon -->
-<link href="images/StarSight_Logo.png?v=322" rel="icon" type="image/png"/>
+<link href="images/StarSight_Logo.png?v=332" rel="icon" type="image/png"/>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
 <!-- LINK TO YOUR NEW CSS FILE -->
-<link href="style.css?v=322" rel="stylesheet"/>
+<link href="style.css?v=332" rel="stylesheet"/>
+<link href="galaxy3d.css?v=20" rel="stylesheet"/>
 <!-- PWA & Mobile Meta -->
-<link href="manifest.json?v=322" rel="manifest"/>
+<link href="manifest.json?v=332" rel="manifest"/>
 <meta content="#05060a" name="theme-color"/>
 <meta content="yes" name="apple-mobile-web-app-capable"/>
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="StarSight" name="apple-mobile-web-app-title"/>
-<link href="images/StarSight_Logo.png?v=322" rel="apple-touch-icon"/>
+<link href="images/StarSight_Logo.png?v=332" rel="apple-touch-icon"/>
 </head>
 <body>
 <div class="fixed-bg"></div>
@@ -104,6 +105,7 @@
 <nav aria-label="Primary navigation" class="main-nav" id="mainNav">
 <button class="nav-item active" data-page-target="sky">Sky</button>
 <button class="nav-item" data-page-target="explore">Explore</button>
+<button class="nav-item" data-page-target="galaxy">Milky Way</button>
 <button class="nav-item" data-page-target="conditions">Conditions</button>
 <button class="nav-item" data-page-target="live">Live</button>
 <button class="nav-item" data-page-target="journal">Journal</button>
@@ -197,6 +199,12 @@
 </div><div class="panel panel-showers">
 <div class="panel-header"><span class="panel-title">Meteor Showers</span></div>
 <div id="showerList"><div style="color:var(--text-faint);font-size:0.8rem;padding:20px;text-align:center;">Loading meteor showers...</div></div>
+</div><div class="panel panel-small-bodies">
+<div class="panel-header"><span class="panel-title">Comets</span><span class="small-body-status" id="cometDataStatus">LIVE EPHEMERIS SNAPSHOT</span></div>
+<div id="cometList"><div class="small-body-empty">Preparing comet targets...</div></div>
+</div><div class="panel panel-small-bodies">
+<div class="panel-header"><span class="panel-title">Asteroids &amp; NEOs</span><span class="small-body-status" id="asteroidDataStatus">LIVE EPHEMERIS SNAPSHOT</span></div>
+<div id="asteroidList"><div class="small-body-empty">Preparing asteroid targets...</div></div>
 </div></section><section aria-hidden="true" class="app-page page-conditions" data-page="conditions"><div class="page-heading"><div class="section-kicker">YOUR LOCAL SKY</div><h2>Observing conditions</h2></div><div class="panel panel-weather">
 <div class="panel-header">
 <span class="panel-title">Conditions</span>
@@ -259,24 +267,41 @@
 <div class="attribution-note">All astronomical calculations use high-precision data sources. Star positions combine Gaia DR3 and the Hipparcos-based Yale BSC, propagated from J2000 with catalog proper motions. Planet positions use VSOP87 ephemeris via Astronomy Engine. Deep-sky objects from OpenNGC (full Messier + NGC/IC subset). Constellation boundaries follow IAU Delporte (1930) definitions. For research-grade astrometry, consult SIMBAD or VizieR.<br/>
         © 2026 StarSight. Developed by Riasat Ahamed. All rights reserved.</div>
 </div>
-</div></section></div>
+</div>
+</section>
+<section aria-hidden="true" class="app-page page-galaxy" data-page="galaxy" data-page-title="Milky Way">
+  <div class="galaxy-shell">
+    <canvas id="galaxyCanvas" aria-label="Interactive three-dimensional model of the Milky Way"></canvas>
+    <div class="galaxy-overlay galaxy-overlay-left" aria-label="Milky Way camera controls">
+      <button class="galaxy-control active" id="galaxyHomeBtn" type="button" aria-label="View from the Sun" title="Sun view">☉</button>
+      <button class="galaxy-control" id="galaxyLocateSunBtn" type="button" aria-label="Locate the Sun in the Milky Way" title="Locate the Sun in the Milky Way">⊙</button>
+      <button class="galaxy-control" id="galaxyCenterBtn" type="button" aria-label="View the Galactic Center" title="Galactic center">◎</button>
+      <button class="galaxy-control" id="galaxyTopBtn" type="button" aria-label="View the Milky Way from above" title="Galaxy view">◌</button>
+    </div>
+        <div class="galaxy-tooltip" id="galaxyTooltip" role="status" aria-live="polite" aria-hidden="true"></div>
+    <div class="galaxy-loading" id="galaxyLoading" aria-live="polite"><div class="galaxy-spinner"></div></div>
+  </div>
+</section>
 
 <!-- LINK TO YOUR NEW JS FILE -->
 <!-- Data must load first -->
-<script src="data.js?v=322"></script>
-<script src="expanded_stars.js?v=322"></script>
+<script src="data.js?v=332"></script>
+<script src="expanded_stars.js?v=332"></script>
 <!-- Standalone features -->
-<script src="telescope.js?v=322"></script>
-<script src="observingLog.js?v=322"></script>
-<script src="api.js?v=322"></script>
+<script src="telescope.js?v=332"></script>
+<script src="observingLog.js?v=332"></script>
+<script src="api.js?v=332"></script>
+<script src="sky_objects.js?v=332"></script>
 <!-- Main logic loads last to kick everything off -->
-<script src="webgl-star-renderer.js?v=322"></script>
-<script src="main.js?v=322"></script>
+<script src="webgl-star-renderer.js?v=333"></script>
+<script src="embedded-galaxy.js"></script>
+<script src="milkyway3d.js?v=24"></script>
+<script src="main.js?v=332"></script>
 <!-- Service Worker Registration -->
 <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js?v=322', { updateViaCache: 'none' })
+            navigator.serviceWorker.register('./sw.js?v=336', { updateViaCache: 'none' })
                 .then(reg => {
                     console.log('StarSight Service Worker registered:', reg.scope);
                     // Ask the browser to check for a newer worker on each app load.
@@ -292,7 +317,7 @@ const pages=[...document.querySelectorAll('.app-page')], navItems=[...document.q
 const drawer=document.getElementById('locationDrawer'), openLoc=document.getElementById('locationOpen'), closeLoc=document.getElementById('locationClose'), menu=document.getElementById('menuToggle'), backdrop=document.getElementById('mobileNavBackdrop'), nav=document.getElementById('mainNav');
 let current='sky', hideTimer;
 function visible(p){if(!p)return false;const c=getComputedStyle(p),r=p.getBoundingClientRect();return p.classList.contains('active')&&c.display!=='none'&&c.visibility!=='hidden'&&parseFloat(c.opacity||'1')>0&&r.height>0;}
-function refresh(name){try{if(name==='sky'){window.dispatchEvent(new Event('resize'));if(typeof drawMap==='function')drawMap();}else if(name==='explore'){if(typeof updatePlanets==='function')updatePlanets();if(typeof drawMoon==='function')drawMoon();if(typeof populateShowers==='function')populateShowers();}else if(name==='conditions'&&typeof fetchWeather==='function')fetchWeather();else if(name==='live'&&typeof updateISSLive==='function')updateISSLive();else if(name==='journal'&&typeof renderObservingLog==='function')renderObservingLog();else if(name==='apod'&&typeof fetchAPOD==='function')fetchAPOD();}catch(e){console.warn('StarSight refresh',e);}}
+function refresh(name){try{if(name==='sky'){window.dispatchEvent(new Event('resize'));if(typeof drawMap==='function')drawMap();}else if(name==='explore'){if(typeof updatePlanets==='function')updatePlanets();if(typeof drawMoon==='function')drawMoon();if(typeof populateShowers==='function')populateShowers();}else if(name==='galaxy'){if(typeof window.initMilkyWayExplorer==='function')window.initMilkyWayExplorer();}else if(name==='conditions'&&typeof fetchWeather==='function')fetchWeather();else if(name==='live'&&typeof updateISSLive==='function')updateISSLive();else if(name==='journal'&&typeof renderObservingLog==='function')renderObservingLog();else if(name==='apod'&&typeof fetchAPOD==='function')fetchAPOD();}catch(e){console.warn('StarSight refresh',e);}}
 function armChrome(){clearTimeout(hideTimer);document.body.classList.remove('chrome-rest');if(current==='sky')hideTimer=setTimeout(()=>document.body.classList.add('chrome-rest'),4200);}
 function showPage(name,push=true){
   if(!document.querySelector('.app-page[data-page="'+name+'"]')) name='sky';
@@ -309,6 +334,7 @@ function showPage(name,push=true){
   requestAnimationFrame(()=>requestAnimationFrame(()=>refresh(name)));
   armChrome();
 }
+window.showStarSightPage=showPage;
 function syncLocation(){const s=document.getElementById('locName'),d=document.getElementById('skyLocationLabel');if(d&&s)d.textContent=s.textContent&&s.textContent!=='--'?s.textContent:'Detecting location…';}
 navItems.forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.pageTarget)));openLoc?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});document.getElementById('hudLocation')?.addEventListener('click',()=>{drawer?.classList.add('open');document.getElementById('cityInput')?.focus();});closeLoc?.addEventListener('click',()=>drawer?.classList.remove('open'));menu?.addEventListener('click',()=>{nav?.classList.toggle('mobile-open');backdrop?.classList.toggle('visible');});backdrop?.addEventListener('click',()=>{nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');});window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'sky',false));document.addEventListener('keydown',e=>{if(e.key==='Escape'){drawer?.classList.remove('open');nav?.classList.remove('mobile-open');backdrop?.classList.remove('visible');}});
 function recover(){const p=document.querySelector('.app-page.active');if(!visible(p))showPage(location.hash.slice(1)||current||'sky',false);else refresh(current);syncLocation();}
